@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1f2a">
+  <title>Il mio profilo · Secret Betting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/common.js"></script>
+</head>
+<body>
+  <main class="wrap">
+    <header class="brand"><h1 id="title">Secret Betting</h1></header>
+    <div class="topbar">
+      <span class="who" id="who"></span>
+      <span class="row">
+        <button class="btn ghost small hidden" id="rulesBtn" type="button">📜 Regole</button>
+        <button class="btn ghost small" id="logout" type="button">Esci</button>
+      </span>
+    </div>
+    <div id="app"><section class="card center muted">Caricamento…</section></div>
+  </main>
+
+  <div class="savebar hidden" id="savebar">
+    <div class="inner">
+      <span id="saveStatus" class="small"></span>
+      <span class="spacer"></span>
+      <button class="btn red" id="saveBtn" type="button">💾 Salva pronostici</button>
+    </div>
+  </div>
+
+  <script>
+    let data = null;        // risposta di /api/me
+    let draft = {};         // { giverId: receiverId } (stringhe)
+    let dirty = false;
+    let revealedOpen = false;
+
+    const app = $("#app");
+
+    async function load() {
+      try {
+        data = await api("GET", "/api/me");
+      } catch (ex) {
+        if (ex.status === 401) {
+          app.innerHTML = "";
+          app.append(h("section", { class: "card center" },
+            h("h2", { style: "justify-content:center" }, "🔑 Accesso richiesto"),
+            h("p", {}, "Apri il link personale che ti ha mandato l'admin per entrare.")));
+          $("#logout").classList.add("hidden");
+          return;
+        }
+        toast(ex.message, "error");
+        return;
+      }
+      if (!dirty) {
+        draft = { ...data.guesses };
+      }
+      render();
+      $("#rulesBtn").classList.remove("hidden");
+      // Al primo accesso (su questo telefono) mostra il regolamento.
+      const seenKey = `sb_rules_seen_${data.me.id}`;
+      if (!localStorage.getItem(seenKey) && !$(".modal-backdrop")) {
+        showRules(() => localStorage.setItem(seenKey, "1"));
+      }
+    }
+
+    // ------------------------------------------------------------ regolamento
+    const MISTLETOE_SVG = `
+      <svg class="mistletoe" viewBox="0 0 130 90" aria-hidden="true">
+        <path d="M65 0 V22" stroke="#9e1724" stroke-width="3"/>
+        <path d="M65 24 C52 10 40 14 46 24 C50 30 60 28 65 24 C70 28 80 30 84 24 C90 14 78 10 65 24 Z" fill="#c8202f"/>
+        <path d="M58 26 L52 40 L60 36 Z M72 26 L78 40 L70 36 Z" fill="#c8202f"/>
+        <circle cx="65" cy="24" r="5" fill="#9e1724"/>
+        <g fill="#2f8f4e" stroke="#1f6f4a" stroke-width="1.5">
+          <ellipse cx="40" cy="44" rx="24" ry="9" transform="rotate(-25 40 44)"/>
+          <ellipse cx="90" cy="44" rx="24" ry="9" transform="rotate(25 90 44)"/>
+          <ellipse cx="50" cy="60" rx="20" ry="8" transform="rotate(-55 50 60)"/>
+          <ellipse cx="80" cy="60" rx="20" ry="8" transform="rotate(55 80 60)"/>
+        </g>
+        <g fill="#fdfbf7" stroke="#cfd8d3" stroke-width="1">
+          <circle cx="60" cy="40" r="6"/><circle cx="71" cy="41" r="6"/><circle cx="65" cy="50" r="6"/>
+        </g>
+      </svg>`;
+    const CANE_SVG = (side) => `
+      <svg class="cane ${side}" viewBox="0 0 40 110" aria-hidden="true">
+        <path d="M28 104 V32 A12 12 0 0 0 4 32" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+        <path d="M28 104 V32 A12 12 0 0 0 4 32" fill="none" stroke="#c8202f" stroke-width="10" stroke-dasharray="7 7"/>
+      </svg>`;
+
+    function showRules(onClose) {
+      const { game } = data;
+      const santaPts = 1 + game.bonus_points;
+      const rules = [
+        ["🎁", "Tocca il pacco per scoprire a chi fai il regalo. È un segreto: non dirlo a nessuno!"],
+        ["🔮", "Per ogni altro partecipante pronostica a chi fa il regalo. Ognuno riceve da una sola persona e nessuno regala a se stesso."],
+        ["✏️", game.deadline
+          ? `Puoi modificare i pronostici quando vuoi fino a ${fmtDate(game.deadline)}. Ricordati di salvare!`
+          : "Puoi modificare i pronostici quando vuoi fino alla scadenza. Ricordati di salvare!"],
+        ["🎯", "Ogni coppia indovinata vale 1 punto."],
+        ["⭐", `Se indovini chi fa il regalo a te, quella coppia vale ${santaPts} punti.`],
+        ["⏱️", "A parità di punti vince chi ha salvato prima: ogni nuovo salvataggio aggiorna l'orario."],
+        data.has_traits ? ["🕵️", "Riceverai 2 indizi personali, uno alla volta. Attenzione: uno è vero e uno è falso, ma non sai quale!"] : null,
+        data.has_traits ? ["📋", "Usa le Schede dei partecipanti per capire a chi si riferiscono gli indizi."] : null,
+        ["🤫", "I pronostici degli altri restano segreti fino alla grande rivelazione alla serata. Alla fine verranno mostrati anche tutti gli indizi distribuiti."],
+      ].filter(Boolean);
+      const close = () => {
+        backdrop.remove();
+        document.removeEventListener("keydown", onKey);
+        if (onClose) onClose();
+      };
+      const onKey = (e) => { if (e.key === "Escape") close(); };
+      const okBtn = h("button", { class: "btn red block", type: "button", onclick: close }, "Ho capito, si gioca! 🎄");
+      const inner = h("div", { class: "modal-inner" },
+        h("h2", { id: "rulesTitle" }, "Il Regolamento"),
+        h("ul", { class: "rules" }, rules.map(([ico, txt]) =>
+          h("li", {}, h("span", { class: "ico" }, ico), h("span", {}, txt)))),
+        okBtn);
+      const modal = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": "rulesTitle" }, inner);
+      modal.insertAdjacentHTML("afterbegin", MISTLETOE_SVG + CANE_SVG("left") + CANE_SVG("right"));
+      const backdrop = h("div", { class: "modal-backdrop", onclick: (e) => { if (e.target === backdrop) close(); } }, modal);
+      document.body.append(backdrop);
+      document.addEventListener("keydown", onKey);
+      inner.scrollTop = 0;
+      okBtn.focus({ preventScroll: true });
+    }
+
+    $("#rulesBtn").addEventListener("click", () => showRules());
+
+    function nameOf(id) {
+      const p = data.participants.find(p => p.id === Number(id));
+      return p ? p.name : "?";
+    }
+
+    function render() {
+      const { me, game, assignment, results } = data;
+      $("#title").textContent = game.name;
+      $("#who").textContent = `🎅 Ciao ${me.name}`;
+      app.innerHTML = "";
+
+      // ---- Stato / scadenza
+      const status = h("section", { class: "card" });
+      status.append(h("h2", {}, "📅 Stato del gioco"));
+      if (game.phase === "setup") {
+        status.append(h("p", {}, "⏳ L'estrazione non è ancora stata fatta. Torna qui quando l'admin vi avvisa!"));
+      } else if (game.phase === "playing") {
+        if (game.guesses_open) {
+          status.append(h("p", {}, h("span", { class: "pill" }, "🟢 Pronostici aperti"),
+            game.deadline ? h("span", { class: "small muted" }, `  fino a ${fmtDate(game.deadline)} (mancano ${countdown(game.deadline)})`) : null));
+        } else {
+          status.append(h("p", {}, h("span", { class: "pill red" }, "🔒 Pronostici chiusi"),
+            h("span", { class: "small muted" }, "  Aspetta la rivelazione alla serata!")));
+        }
+      } else {
+        status.append(h("p", {}, h("span", { class: "pill gold" }, "✨ Rivelazione in corso"),
+          " ", h("a", { href: "/reveal" }, "Guarda la classifica")));
+      }
+      app.append(status);
+
+      // ---- Risultati personali
+      if (results) {
+        app.append(h("section", { class: "card center" },
+          h("h2", { style: "justify-content:center" }, "🏆 Il tuo risultato"),
+          h("div", { class: "gift" },
+            h("div", { class: "target" }, `${results.points} punti`),
+            h("div", { class: "muted" }, `${results.rank}° posto su ${results.total_players} · ${results.correct} coppie indovinate`
+              + (results.bonus ? " · ⭐ bonus preso!" : ""))),
+          h("p", { class: "small muted" }, "Il punteggio si aggiorna man mano che vengono svelate le coppie.")));
+      }
+
+      // ---- Il mio abbinamento
+      if (assignment) {
+        const giftBtn = h("button", { class: "gift", type: "button", "aria-live": "polite" });
+        const drawGift = () => {
+          giftBtn.innerHTML = "";
+          if (revealedOpen) {
+            giftBtn.append(h("div", { class: "muted" }, "Devi fare il regalo a"),
+              h("div", { class: "target" }, assignment.name),
+              h("div", { class: "small muted" }, "Tocca per nascondere 🙈"));
+          } else {
+            giftBtn.append(h("div", { class: "box" }, "🎁"),
+              h("div", { style: "font-weight:800" }, "Tocca per scoprire a chi fai il regalo"),
+              h("div", { class: "small muted" }, "Assicurati che nessuno stia guardando 👀"));
+          }
+        };
+        giftBtn.addEventListener("click", () => { revealedOpen = !revealedOpen; drawGift(); });
+        drawGift();
+        app.append(h("section", { class: "card" }, h("h2", {}, "🎅 Il tuo Secret Santa"), giftBtn));
+        if (data.hints.length) app.append(renderHints());
+        app.append(renderGuesses());
+      }
+      updateSavebar();
+    }
+
+    function hintSentence(x) {
+      const chip = h("span", { class: "chip" }, `${x.trait}: ${x.value}`);
+      return x.kind === "santa_of"
+        ? h("div", { class: "hint-text" }, "Chi fa il regalo a ", h("b", {}, x.subject), " ha ", chip)
+        : h("div", { class: "hint-text" }, h("b", {}, x.subject), " fa il regalo a qualcuno con ", chip);
+    }
+
+    function renderHints() {
+      const card = h("section", { class: "card" },
+        h("div", { class: "row" }, h("h2", { style: "margin:4px 0" }, "🕵️ I tuoi indizi"), h("span", { class: "spacer" }),
+          h("a", { class: "btn small gold", href: "/schede" }, "📋 Schede")),
+        h("p", { class: "small muted" }, "⚠️ Uno dei due indizi è vero e uno è falso, ma non sai quale!"));
+      for (const x of data.hints) {
+        const box = h("div", { class: "hint" + (x.unlocked ? "" : " locked") });
+        const head = h("div", { class: "row" }, h("span", { class: "pill gold" }, `Indizio #${x.slot}`), h("span", { class: "spacer" }));
+        if (x.is_true !== undefined) {
+          head.append(x.is_true ? h("span", { class: "pill" }, "✅ Vero") : h("span", { class: "pill red" }, "❌ Falso"));
+        }
+        box.append(head);
+        if (x.unlocked) {
+          box.append(hintSentence(x));
+        } else {
+          box.append(h("div", { class: "hint-text muted" }, "🔒 ",
+            x.unlock_at ? `Si sblocca ${fmtDate(x.unlock_at)} (tra ${countdown(x.unlock_at)})` : "Data di sblocco ancora da definire"));
+        }
+        card.append(box);
+      }
+      return card;
+    }
+
+    function renderGuesses() {
+      const { me, game, assignment, results, participants } = data;
+      const editable = game.guesses_open;
+      const others = participants.filter(p => p.id !== me.id);
+      const total = others.length;
+      const card = h("section", { class: "card" });
+      card.append(h("h2", {}, "🔮 I tuoi pronostici"));
+
+      const progressLabel = h("div", { class: "small", style: "font-weight:700" });
+      const bar = h("div", {});
+      card.append(progressLabel, h("div", { class: "progress" }, bar));
+
+      // Destinatari possibili: tutti tranne la persona che ho pescato io
+      const receivers = participants.filter(p => p.id !== assignment.id);
+      const selects = [];
+
+      for (const giver of others) {
+        const sel = h("select", { "aria-label": `${giver.name} fa il regalo a`, disabled: !editable });
+        sel.dataset.giver = giver.id;
+        sel.append(h("option", { value: "" }, "— scegli —"));
+        for (const r of receivers) {
+          if (r.id === giver.id) continue;
+          sel.append(h("option", { value: r.id }, r.id === me.id ? "⭐ Me" : r.name));
+        }
+        sel.value = draft[giver.id] != null ? String(draft[giver.id]) : "";
+        sel.addEventListener("change", () => {
+          if (sel.value) draft[giver.id] = Number(sel.value); else delete draft[giver.id];
+          dirty = true;
+          refresh();
+        });
+        selects.push(sel);
+
+        let mark = "";
+        if (results) {
+          const truth = results.revealed[giver.id];
+          if (truth === undefined) mark = "⏳";
+          else mark = Number(draft[giver.id]) === truth ? "✅" : "❌";
+        }
+        const markEl = h("span", { class: "mark", title: results && results.revealed[giver.id] !== undefined
+          ? `In realtà: ${nameOf(results.revealed[giver.id])}` : "" }, mark);
+        card.append(h("div", { class: "guess" },
+          h("span", { class: "giver" }, giver.name), h("span", { class: "arrow" }, "→"), sel, markEl));
+      }
+
+      function refresh() {
+        const used = new Map(); // receiverId -> giverId
+        for (const [g, r] of Object.entries(draft)) used.set(String(r), g);
+        for (const sel of selects) {
+          for (const opt of sel.options) {
+            if (!opt.value) continue;
+            const owner = used.get(opt.value);
+            const taken = owner !== undefined && owner !== sel.dataset.giver;
+            opt.disabled = taken;
+            const base = Number(opt.value) === me.id ? "⭐ Me" : nameOf(opt.value);
+            opt.textContent = taken ? `${base} · già assegnato` : base;
+          }
+        }
+        const n = Object.keys(draft).length;
+        progressLabel.textContent = `${n} / ${total} pronostici compilati`;
+        bar.style.width = (total ? (n / total) * 100 : 0) + "%";
+        updateSavebar();
+      }
+      refresh();
+      return card;
+    }
+
+    function updateSavebar() {
+      const bar = $("#savebar");
+      const show = data && data.assignment && data.game.guesses_open;
+      bar.classList.toggle("hidden", !show);
+      if (!show) return;
+      const status = $("#saveStatus");
+      if (dirty) status.textContent = "✏️ Modifiche non salvate";
+      else if (data.guesses_updated_at) status.textContent = "✓ Salvato " + fmtDate(data.guesses_updated_at);
+      else status.textContent = "Non hai ancora salvato";
+      $("#saveBtn").disabled = !dirty;
+    }
+
+    $("#saveBtn").addEventListener("click", async () => {
+      $("#saveBtn").disabled = true;
+      try {
+        const r = await api("PUT", "/api/me/guesses", { guesses: draft });
+        dirty = false;
+        data.guesses_updated_at = r.updated_at;
+        toast(r.saved === r.total ? "Pronostici salvati! 🎄" : `Salvati ${r.saved}/${r.total} pronostici`, "success");
+        updateSavebar();
+      } catch (ex) {
+        toast(ex.message, "error");
+        $("#saveBtn").disabled = false;
+        if (ex.status === 403) { dirty = false; load(); }
+      }
+    });
+
+    $("#logout").addEventListener("click", async () => {
+      if (dirty && !confirm("Hai modifiche non salvate. Uscire comunque?")) return;
+      await api("POST", "/api/auth/logout", {}).catch(() => {});
+      dirty = false;
+      location.href = "/";
+    });
+
+    window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+    load();
+    // Durante la rivelazione aggiorna i risultati in automatico.
+    setInterval(() => { if (data && data.game.phase === "reveal") load(); }, 5000);
+    // Quando scocca l'ora di un indizio, ricarica per mostrarlo (senza perdere le modifiche non salvate).
+    setInterval(() => {
+      if (!data || !data.hints) return;
+      const now = Date.now() / 1000;
+      if (data.hints.some(x => !x.unlocked && x.unlock_at && x.unlock_at <= now)) load();
+    }, 30000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1f2a">
+  <title>Secret Betting 🎅</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/common.js"></script>
+</head>
+<body>
+  <main class="wrap">
+    <header class="brand">
+      <h1 id="title">Secret Betting</h1>
+      <p>Indovina chi fa il regalo a chi 🎁</p>
+    </header>
+
+    <section class="card">
+      <h2>🎄 Come funziona</h2>
+      <ol>
+        <li>L'admin fa l'estrazione: ognuno scopre <b>solo</b> a chi deve fare il regalo.</li>
+        <li>Dal tuo profilo pronostichi chi fa il regalo a chi, per tutti gli altri.</li>
+        <li>Puoi modificare i pronostici quando vuoi, fino alla scadenza.</li>
+        <li>Alla serata si svelano le coppie: <b>1 punto</b> per ogni coppia indovinata. Se indovini chi fa il regalo <b>a te</b>, quella coppia vale <b><span id="santaPts">3</span> punti</b>.</li>
+        <li>A parità di punti è più in alto chi ha salvato i pronostici <b>prima</b> (conta l'ultimo salvataggio).</li>
+      </ol>
+    </section>
+
+    <section class="card center">
+      <h2 style="justify-content:center">🔑 Accedi</h2>
+      <p>Apri il <b>link personale</b> che ti ha mandato l'admin.<br>
+        <span class="muted small">Se sei già entrato da questo telefono, vai al tuo profilo.</span></p>
+      <a class="btn red" href="/me">Vai al mio profilo</a>
+    </section>
+
+    <p class="footer"><a href="/reveal">Classifica</a> · <a href="/admin">Admin</a></p>
+  </main>
+  <script>
+    api("GET", "/api/reveal").then(r => {
+      document.getElementById("title").textContent = r.game.name;
+      document.title = r.game.name + " 🎅";
+      document.getElementById("santaPts").textContent = 1 + r.game.bonus_points;
+    }).catch(() => {});
+  </script>
+</body>
+</html>

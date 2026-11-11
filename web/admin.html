@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1f2a">
+  <meta name="robots" content="noindex">
+  <title>Admin · Secret Betting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/common.js"></script>
+</head>
+<body>
+  <main class="wrap wide">
+    <header class="brand"><h1>Pannello Admin</h1><p>🧝 Il laboratorio di Babbo Natale</p></header>
+
+    <!-- Login -->
+    <section class="card hidden" id="loginCard" style="max-width:420px;margin:0 auto">
+      <h2>🔐 Accesso admin</h2>
+      <form id="loginForm">
+        <label for="pw">Password</label>
+        <input id="pw" type="password" autocomplete="current-password" required>
+        <div class="error-msg" id="loginErr" role="alert"></div>
+        <button class="btn red block" type="submit">Entra</button>
+      </form>
+    </section>
+
+    <div id="dash" class="hidden">
+      <div class="topbar">
+        <span class="who">🎄 <span id="gameName"></span></span>
+        <span class="row">
+          <a class="btn ghost small" href="/reveal" target="_blank" rel="noopener">📺 Schermo rivelazione</a>
+          <button class="btn ghost small" id="logoutBtn" type="button">Esci</button>
+        </span>
+      </div>
+
+      <section class="card">
+        <h2>🚦 Fase del gioco</h2>
+        <div id="phaseBox"></div>
+        <p class="small muted" style="margin-top:14px">🤫 Come admin non vedi mai l'esito dell'estrazione: le coppie compaiono solo durante la rivelazione.
+          Per giocare anche tu usa il <b>tuo link personale</b> come tutti gli altri.</p>
+      </section>
+
+      <section class="card">
+        <h2>👥 Partecipanti <span class="pill grey" id="count"></span></h2>
+        <form id="addForm" class="row">
+          <input id="newName" placeholder="Nome del partecipante" maxlength="40" style="flex:1;min-width:180px">
+          <button class="btn" type="submit">➕ Aggiungi</button>
+        </form>
+        <p class="small muted" id="addHint"></p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Nome</th><th>PIN</th><th>Abbinamento visto</th><th>Pronostici</th><th>Link e azioni</th></tr></thead>
+            <tbody id="people"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>🚫 Vincoli di estrazione</h2>
+        <p class="small muted">Coppie che non possono pescarsi (es. fidanzati, chi si è pescato l'anno scorso). I vincoli sono visibili solo a te.</p>
+        <form id="exForm" class="row">
+          <select id="exGiver" style="flex:1;min-width:140px"></select>
+          <span>non può pescare</span>
+          <select id="exReceiver" style="flex:1;min-width:140px"></select>
+          <label class="row" style="margin:0;font-weight:600"><input type="checkbox" id="exBoth" checked> e viceversa</label>
+          <button class="btn" type="submit">Aggiungi vincolo</button>
+        </form>
+        <ul class="list" id="exList" style="margin-top:10px"></ul>
+      </section>
+
+      <section class="card">
+        <h2>🧩 Caratteristiche per gli indizi</h2>
+        <p class="small muted">5-6 caratteristiche uguali per tutti, ognuna con almeno 2 valori (es. Altezza: bassa, media, alta oppure Fidanzato: sì, no).
+          All'estrazione l'app crea 2 indizi a testa, uno vero e uno falso, senza che nessuno (nemmeno tu) li veda.
+          Le schede sono visibili a tutti i giocatori.</p>
+        <ul class="list" id="traitList"></ul>
+        <div id="derivedBox" style="margin-top:12px"></div>
+        <form id="traitForm" class="row" style="margin-top:10px">
+          <input id="traitName" placeholder="Nome (es. Altezza)" maxlength="30" style="flex:1;min-width:140px">
+          <input id="traitOptions" placeholder="Valori separati da virgola (es. bassa, media, alta)" style="flex:2;min-width:220px">
+          <button class="btn" type="submit">➕ Aggiungi</button>
+        </form>
+
+        <h3>📋 Schede dei partecipanti <span class="pill grey" id="schedeStatus"></span></h3>
+        <div class="table-scroll">
+          <table id="schede" class="schede-table"></table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>⚙️ Impostazioni</h2>
+        <form id="settingsForm">
+          <div class="row">
+            <div style="flex:2;min-width:200px">
+              <label for="sName">Nome del gioco</label>
+              <input id="sName" maxlength="80" required>
+            </div>
+            <div style="flex:2;min-width:200px">
+              <label for="sDeadline">Scadenza pronostici</label>
+              <input id="sDeadline" type="datetime-local">
+            </div>
+            <div style="flex:1;min-width:120px">
+              <label for="sBonus">Punti extra se indovini il tuo Santa</label>
+              <input id="sBonus" type="number" min="0" max="10" step="1">
+            </div>
+          </div>
+          <div class="row">
+            <div style="flex:1;min-width:200px">
+              <label for="sHint1">🕵️ Sblocco indizio 1</label>
+              <input id="sHint1" type="datetime-local">
+            </div>
+            <div style="flex:1;min-width:200px">
+              <label for="sHint2">🕵️ Sblocco indizio 2</label>
+              <input id="sHint2" type="datetime-local">
+            </div>
+          </div>
+          <div class="row end" style="margin-top:14px"><button class="btn" type="submit">💾 Salva impostazioni</button></div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    let st = null;
+    const PHASES = { setup: "🛠️ Preparazione", playing: "🎲 Gioco in corso", reveal: "✨ Rivelazione" };
+
+    function linkFor(p) { return `${location.origin}/p/${encodeURIComponent(p.code)}`; }
+    function toLocalInput(epoch) {
+      if (!epoch) return "";
+      const d = new Date(epoch * 1000);
+      const pad = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    async function act(method, url, payload, okMsg) {
+      try {
+        await api(method, url, payload ?? {});
+        if (okMsg) toast(okMsg, "success");
+        await load();
+        return true;
+      } catch (ex) {
+        toast(ex.message, "error");
+        if (ex.status === 401) showLogin();
+        return false;
+      }
+    }
+
+    function showLogin() {
+      $("#loginCard").classList.remove("hidden");
+      $("#dash").classList.add("hidden");
+    }
+
+    async function load(first = false) {
+      try {
+        st = await api("GET", "/api/admin/state");
+      } catch (ex) {
+        if (ex.status === 401) return showLogin();
+        return toast(ex.message, "error");
+      }
+      $("#loginCard").classList.add("hidden");
+      $("#dash").classList.remove("hidden");
+      render(first);
+    }
+
+    function render(fillSettings) {
+      const { game } = st;
+      $("#gameName").textContent = game.name;
+      const setup = game.phase === "setup";
+
+      // ---------- fase
+      const box = $("#phaseBox");
+      box.innerHTML = "";
+      box.append(h("p", {}, h("span", { class: "pill gold" }, PHASES[game.phase])));
+      const n = st.participants.length;
+      const incomplete = st.participants.filter(p =>
+        Object.keys(st.trait_values[p.id] || {}).length < st.traits.length);
+      const hintDates = game.hint_dates.map(d => d ? fmtDate(d) : "data non impostata");
+      if (game.phase === "setup") {
+        const blocked = n < 3 || incomplete.length > 0;
+        add(box,
+          h("p", {}, "Aggiungi partecipanti, vincoli e schede, poi fai l'estrazione. Dopo l'estrazione non potrai più modificare partecipanti, caratteristiche e schede."),
+          h("button", { class: "btn red", disabled: blocked, onclick: () => {
+            if (confirm(`Fare l'estrazione per ${n} partecipanti?`)) act("POST", "/api/admin/draw", {}, "Estrazione fatta! 🎲");
+          } }, "🎲 Fai l'estrazione"),
+          n < 3 ? h("span", { class: "small muted" }, "  Servono almeno 3 partecipanti.") : null,
+          n >= 3 && incomplete.length ? h("span", { class: "small muted" }, `  Completa le schede di: ${incomplete.map(p => p.name).join(", ")}`) : null,
+          !st.traits.length ? h("p", { class: "small muted" }, "ℹ️ Senza caratteristiche il gioco parte senza indizi.") : null);
+      } else if (game.phase === "playing") {
+        const viewed = st.participants.filter(p => p.viewed).length;
+        const done = st.participants.filter(p => p.guesses > 0 && p.guesses === p.guesses_total).length;
+        add(box,
+          h("p", {}, `👀 ${viewed}/${n} hanno visto il proprio abbinamento · 🔮 ${done}/${n} hanno completato i pronostici`),
+          st.hints_count ? h("p", {}, `🕵️ ${st.hints_count} indizi pronti (2 a testa) · indizio 1: ${hintDates[0]} · indizio 2: ${hintDates[1]}`) : null,
+          h("p", {}, game.guesses_open ? h("span", { class: "pill" }, "🟢 Pronostici aperti") : h("span", { class: "pill red" }, "🔒 Pronostici chiusi"),
+            game.deadline ? h("span", { class: "small muted" }, `  scadenza: ${fmtDate(game.deadline)}`) : h("span", { class: "small muted" }, "  nessuna scadenza impostata")),
+          h("div", { class: "row" },
+            h("button", { class: "btn ghost small", style: "color:var(--ink)", onclick: () =>
+              act("POST", "/api/admin/guesses", { closed: game.guesses_open }, game.guesses_open ? "Pronostici chiusi" : "Pronostici riaperti")
+            }, game.guesses_open ? "🔒 Chiudi pronostici ora" : "🔓 Riapri pronostici"),
+            st.anyone_viewed ? null : h("button", { class: "btn ghost small", style: "color:var(--ink)", onclick: async () => {
+              if (!confirm("Rifare l'estrazione? Le coppie attuali verranno sostituite.")) return;
+              if (await act("POST", "/api/admin/undo-draw")) act("POST", "/api/admin/draw", {}, "Nuova estrazione fatta! 🎲");
+            } }, "🔁 Rifai estrazione"),
+            st.anyone_viewed ? null : h("button", { class: "btn ghost small", style: "color:var(--ink)", onclick: () => {
+              if (confirm("Annullare l'estrazione e tornare alla preparazione?")) act("POST", "/api/admin/undo-draw", {}, "Estrazione annullata");
+            } }, "↩️ Annulla estrazione"),
+            h("span", { class: "spacer" }),
+            h("button", { class: "btn red", onclick: () => {
+              if (confirm("Avviare la rivelazione? I pronostici verranno chiusi definitivamente.")) act("POST", "/api/admin/reveal", { action: "start" }, "Si va in scena! ✨");
+            } }, "✨ Avvia rivelazione")),
+          st.anyone_viewed ? h("p", { class: "small muted" }, "Qualcuno ha già visto il proprio abbinamento: l'estrazione non è più modificabile.") : null);
+      } else {
+        const total = n;
+        add(box, 
+          h("p", {}, `Coppie svelate: ${st.reveal_step} / ${total}`),
+          h("div", { class: "row" },
+            h("button", { class: "btn ghost small", style: "color:var(--ink)", disabled: st.reveal_step === 0,
+              onclick: () => act("POST", "/api/admin/reveal", { action: "prev" }) }, "⏮ Indietro"),
+            h("button", { class: "btn red", disabled: st.reveal_step >= total,
+              onclick: () => act("POST", "/api/admin/reveal", { action: "next" }) }, "🎁 Svela prossima coppia"),
+            h("button", { class: "btn ghost small", style: "color:var(--ink)", disabled: st.reveal_step >= total,
+              onclick: () => { if (confirm("Svelare tutte le coppie rimanenti?")) act("POST", "/api/admin/reveal", { action: "all" }); } }, "⏭ Svela tutto"),
+            st.reveal_step === 0 ? h("button", { class: "btn ghost small", style: "color:var(--ink)",
+              onclick: () => act("POST", "/api/admin/reveal", { action: "stop" }, "Tornati al gioco") }, "↩️ Torna al gioco") : null));
+      }
+
+      // ---------- partecipanti
+      $("#count").textContent = n;
+      $("#addForm").classList.toggle("hidden", !setup);
+      $("#addHint").textContent = setup ? "Dopo aver aggiunto i partecipanti, manda a ciascuno il suo link personale (📋 o WhatsApp)." :
+        "L'estrazione è fatta: la lista partecipanti è bloccata (puoi solo rinominare).";
+      const tbody = $("#people");
+      tbody.innerHTML = "";
+      for (const p of st.participants) {
+        const url = linkFor(p);
+        const msg = `Ciao ${p.name}! 🎅 Ecco il tuo link personale per ${game.name}:\n${url}\nAl primo accesso scegli un PIN segreto (non dirlo a nessuno!).`;
+        tbody.append(h("tr", {},
+          h("td", { style: "font-weight:800" }, p.name),
+          h("td", {}, p.locked ? h("span", { class: "pill red" }, "bloccato") : p.pin_set ? h("span", { class: "pill" }, "✓ impostato") : h("span", { class: "pill grey" }, "da impostare")),
+          h("td", {}, game.phase === "setup" ? "—" : p.viewed ? "✓" : h("span", { class: "muted" }, "non ancora")),
+          h("td", {}, game.phase === "setup" ? "—" : `${p.guesses}/${p.guesses_total}`),
+          h("td", {}, h("div", { class: "actions" },
+            h("button", { class: "btn small", title: url, onclick: async () => {
+              try { await navigator.clipboard.writeText(url); toast("Link copiato 📋", "success"); }
+              catch { prompt("Copia il link:", url); }
+            } }, "📋 Link"),
+            h("a", { class: "btn small", style: "background:#25D366;box-shadow:0 4px 0 #1a9e4b", target: "_blank", rel: "noopener",
+              href: "https://wa.me/?text=" + encodeURIComponent(msg) }, "WhatsApp"),
+            h("button", { class: "btn small gold", onclick: () => {
+              const name = prompt("Nuovo nome:", p.name);
+              if (name && name.trim() !== p.name) act("PATCH", `/api/admin/participants/${p.id}`, { name }, "Nome aggiornato");
+            } }, "✏️"),
+            h("button", { class: "btn small gold", title: "Reset PIN", disabled: !p.pin_set && !p.locked, onclick: () => {
+              if (confirm(`Resettare il PIN di ${p.name}? Al prossimo accesso dovrà sceglierne uno nuovo.`))
+                act("POST", `/api/admin/participants/${p.id}/reset-pin`, {}, "PIN resettato");
+            } }, "🔑 Reset PIN"),
+            h("button", { class: "btn small gold", title: "Genera un nuovo link (il vecchio smette di funzionare)", onclick: () => {
+              if (confirm(`Generare un nuovo link per ${p.name}? Il vecchio link smetterà di funzionare.`))
+                act("POST", `/api/admin/participants/${p.id}/new-link`, {}, "Nuovo link generato");
+            } }, "🔗 Nuovo link"),
+            setup ? h("button", { class: "btn small red", onclick: () => {
+              if (confirm(`Eliminare ${p.name}?`)) act("DELETE", `/api/admin/participants/${p.id}`, {}, "Partecipante eliminato");
+            } }, "🗑") : null))));
+      }
+      if (!n) tbody.append(h("tr", {}, h("td", { colspan: 5, class: "muted center" }, "Nessun partecipante. Aggiungine qualcuno ☝️")));
+
+      // ---------- vincoli
+      const names = Object.fromEntries(st.participants.map(p => [p.id, p.name]));
+      $("#exForm").classList.toggle("hidden", !setup);
+      for (const sel of [$("#exGiver"), $("#exReceiver")]) {
+        const prev = sel.value;
+        sel.innerHTML = "";
+        sel.append(h("option", { value: "" }, "— scegli —"));
+        for (const p of st.participants) sel.append(h("option", { value: p.id }, p.name));
+        sel.value = prev;
+      }
+      const exList = $("#exList");
+      exList.innerHTML = "";
+      for (const e of st.exclusions) {
+        exList.append(h("li", {},
+          h("span", {}, `${names[e.giver_id]} `, h("b", {}, "✕→"), ` ${names[e.receiver_id]}`),
+          h("span", { class: "spacer" }),
+          setup ? h("button", { class: "btn small red", onclick: () => act("DELETE", "/api/admin/exclusions", e, "Vincolo rimosso") }, "🗑") : null));
+      }
+      if (!st.exclusions.length) exList.append(h("li", { class: "muted" }, "Nessun vincolo."));
+
+      // ---------- caratteristiche
+      $("#traitForm").classList.toggle("hidden", !setup || st.traits.length >= 8);
+      const traitList = $("#traitList");
+      traitList.innerHTML = "";
+      for (const t of st.traits) {
+        traitList.append(h("li", {},
+          h("b", {}, t.name),
+          t.derived ? h("span", { class: "pill gold", title: "Calcolata dalla data di nascita" }, "📅 automatica") : null,
+          h("span", { class: "small muted" }, t.options.join(" · ")),
+          h("span", { class: "spacer" }),
+          setup && !t.derived ? h("button", { class: "btn small gold", onclick: () => {
+            const name = prompt("Nome della caratteristica:", t.name);
+            if (name === null) return;
+            const options = prompt("Valori separati da virgola (almeno 2).\nI valori tolti andranno ricompilati nelle schede.", t.options.join(", "));
+            if (options === null) return;
+            act("PUT", `/api/admin/traits/${t.id}`, { name, options }, "Caratteristica aggiornata");
+          } }, "✏️") : null,
+          setup ? h("button", { class: "btn small red", onclick: () => {
+            if (confirm(`Eliminare «${t.name}» e i relativi valori nelle schede?`)) act("DELETE", `/api/admin/traits/${t.id}`, {}, "Caratteristica eliminata");
+          } }, "🗑") : null));
+      }
+      if (!st.traits.length) traitList.append(h("li", { class: "muted" }, "Nessuna caratteristica: aggiungine 5-6 qui sotto."));
+
+      // ---------- caratteristiche automatiche dalla data di nascita
+      const DERIVED = {
+        stagione: "Stagione di nascita", elemento: "Elemento zodiacale", segno: "Segno zodiacale",
+        semestre: "Semestre di nascita", eta: "Età nel gruppo",
+      };
+      const present = new Set(st.traits.map(t => t.derived).filter(Boolean));
+      const missingDerived = Object.entries(DERIVED).filter(([k]) => !present.has(k));
+      const derivedBox = $("#derivedBox");
+      derivedBox.innerHTML = "";
+      if (setup && missingDerived.length && st.traits.length < 8) {
+        add(derivedBox,
+          h("div", { class: "small", style: "font-weight:800;margin-bottom:6px" }, "📅 Dalla data di nascita (calcolate in automatico):"),
+          h("div", { class: "actions" }, missingDerived.map(([k, label]) =>
+            h("button", { class: "btn small ghost", style: "color:var(--ink)", type: "button",
+              onclick: () => act("POST", "/api/admin/traits", { derived: k }, `${label} aggiunta`) }, `➕ ${label}`))),
+          h("p", { class: "small muted" }, "Inserisci la data nella colonna 📅 delle schede. La data la vedi solo tu: ai giocatori arrivano solo i valori calcolati."));
+      }
+
+      // ---------- schede
+      const table = $("#schede");
+      table.innerHTML = "";
+      $("#schedeStatus").textContent = st.traits.length ? `${n - incomplete.length}/${n} complete` : "";
+      const hasDerived = present.size > 0;
+      if (st.traits.length && n) {
+        table.append(h("thead", {}, h("tr", {}, h("th", {}, "Nome"),
+          hasDerived ? h("th", {}, "📅 Nascita") : null,
+          st.traits.map(t => h("th", {}, (t.derived ? "📅 " : "") + t.name)))));
+        const tb = h("tbody", {});
+        for (const p of st.participants) {
+          const vals = st.trait_values[p.id] || {};
+          let dateCell = null;
+          if (hasDerived) {
+            if (setup) {
+              const inp = h("input", { type: "date", value: p.birthdate || "", max: new Date().toISOString().slice(0, 10),
+                "aria-label": `Data di nascita di ${p.name}`, style: p.birthdate ? "" : "border-color:var(--gold)" });
+              inp.addEventListener("change", () => act("PUT", `/api/admin/participants/${p.id}/birthdate`, { birthdate: inp.value }));
+              dateCell = h("td", { style: "min-width:150px" }, inp);
+            } else {
+              dateCell = h("td", {}, p.birthdate ? new Date(p.birthdate + "T00:00").toLocaleDateString("it-IT") : "—");
+            }
+          }
+          tb.append(h("tr", {}, h("td", { style: "font-weight:800" }, p.name), dateCell, st.traits.map(t => {
+            const v = vals[t.id] || "";
+            if (t.derived) return h("td", { class: v ? "" : "muted" }, v || "—");
+            if (!setup) return h("td", {}, v || "—");
+            const sel = h("select", { "aria-label": `${t.name} di ${p.name}`, style: v ? "" : "border-color:var(--gold)" },
+              h("option", { value: "" }, "—"), t.options.map(o => h("option", { value: o }, o)));
+            sel.value = v;
+            sel.addEventListener("change", () => act("PUT", "/api/admin/trait-values",
+              { participant_id: p.id, trait_id: t.id, value: sel.value }));
+            return h("td", { style: "min-width:120px" }, sel);
+          })));
+        }
+        table.append(tb);
+      }
+
+      // ---------- impostazioni (solo al primo caricamento o dopo il salvataggio, per non sovrascrivere ciò che stai scrivendo)
+      if (fillSettings) {
+        $("#sName").value = game.name;
+        $("#sDeadline").value = toLocalInput(game.deadline);
+        $("#sBonus").value = game.bonus_points;
+        $("#sHint1").value = toLocalInput(game.hint_dates[0]);
+        $("#sHint2").value = toLocalInput(game.hint_dates[1]);
+      }
+    }
+
+    $("#traitForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = $("#traitName").value.trim();
+      const options = $("#traitOptions").value;
+      if (!name) return toast("Dai un nome alla caratteristica", "error");
+      if (await act("POST", "/api/admin/traits", { name, options }, `${name} aggiunta`)) {
+        $("#traitName").value = "";
+        $("#traitOptions").value = "";
+      }
+    });
+
+    $("#loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("#loginErr").textContent = "";
+      try {
+        await api("POST", "/api/admin/login", { password: $("#pw").value });
+        $("#pw").value = "";
+        load(true);
+      } catch (ex) { $("#loginErr").textContent = ex.message; }
+    });
+
+    $("#logoutBtn").addEventListener("click", async () => {
+      await api("POST", "/api/admin/logout", {}).catch(() => {});
+      showLogin();
+    });
+
+    $("#addForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = $("#newName").value.trim();
+      if (!name) return;
+      if (await act("POST", "/api/admin/participants", { name }, `${name} aggiunto 🎄`)) {
+        $("#newName").value = "";
+        $("#newName").focus();
+      }
+    });
+
+    $("#exForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const giver_id = $("#exGiver").value, receiver_id = $("#exReceiver").value;
+      if (!giver_id || !receiver_id) return toast("Seleziona due partecipanti", "error");
+      act("POST", "/api/admin/exclusions", { giver_id, receiver_id, both: $("#exBoth").checked }, "Vincolo aggiunto");
+    });
+
+    $("#settingsForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const toEpoch = (v) => v ? new Date(v).getTime() / 1000 : "";
+      const ok = await act("PUT", "/api/admin/settings", {
+        game_name: $("#sName").value,
+        deadline: toEpoch($("#sDeadline").value),
+        bonus_points: Number($("#sBonus").value || 0),
+        hint1_at: toEpoch($("#sHint1").value),
+        hint2_at: toEpoch($("#sHint2").value),
+      }, "Impostazioni salvate");
+      if (ok) render(true);
+    });
+
+    load(true);
+    // Aggiorna lo stato (chi ha visto, pronostici consegnati…) ogni 10 secondi.
+    // Non aggiorna mentre stai scrivendo o scegliendo un valore.
+    setInterval(() => {
+      const busy = document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
+      if (!busy && !$("#dash").classList.contains("hidden")) load(false);
+    }, 10000);
+  </script>
+</body>
+</html>

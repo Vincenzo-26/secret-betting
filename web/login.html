@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1f2a">
+  <title>Accedi · Secret Betting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/common.js"></script>
+</head>
+<body>
+  <main class="wrap">
+    <header class="brand">
+      <h1>Secret Betting</h1>
+      <p id="subtitle">🎅 Ho Ho Ho!</p>
+    </header>
+
+    <section class="card" id="card">
+      <p class="center muted">Caricamento…</p>
+    </section>
+  </main>
+
+  <script>
+    const code = decodeURIComponent(location.pathname.split("/").filter(Boolean).pop() || "");
+    const card = $("#card");
+
+    function render(info) {
+      $("#subtitle").textContent = `Ciao ${info.name}! 👋`;
+      const first = !info.pin_set;
+      card.innerHTML = "";
+      card.append(
+        h("h2", {}, first ? "🔐 Scegli il tuo PIN" : "🔐 Inserisci il tuo PIN"),
+        h("p", { class: "muted small" }, first
+          ? "È il tuo primo accesso. Scegli un PIN di 4-8 cifre: ti servirà per rientrare. Non dirlo a nessuno, nemmeno all'admin!"
+          : "Inserisci il PIN che hai scelto al primo accesso."),
+      );
+      const form = h("form", {});
+      const pin = h("input", { class: "pin-input", type: "password", inputmode: "numeric", pattern: "[0-9]*",
+        autocomplete: first ? "new-password" : "current-password", maxlength: "8", required: true, "aria-label": "PIN" });
+      form.append(pin);
+      let pin2;
+      if (first) {
+        form.append(h("label", {}, "Ripeti il PIN"));
+        pin2 = h("input", { class: "pin-input", type: "password", inputmode: "numeric", pattern: "[0-9]*",
+          autocomplete: "new-password", maxlength: "8", required: true, "aria-label": "Ripeti PIN" });
+        form.append(pin2);
+      }
+      const err = h("div", { class: "error-msg", role: "alert" });
+      const btn = h("button", { class: "btn red block", type: "submit", style: "margin-top:14px" }, first ? "Salva PIN ed entra 🎄" : "Entra 🎄");
+      form.append(err, btn);
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        err.textContent = "";
+        if (!/^\d{4,8}$/.test(pin.value)) { err.textContent = "Il PIN deve avere da 4 a 8 cifre."; return; }
+        if (first && pin.value !== pin2.value) { err.textContent = "I due PIN non coincidono."; return; }
+        btn.disabled = true;
+        try {
+          await api("POST", "/api/auth/pin", { code, pin: pin.value });
+          location.href = "/me";
+        } catch (ex) {
+          err.textContent = ex.message;
+          pin.value = ""; if (pin2) pin2.value = "";
+          btn.disabled = false;
+        }
+      });
+      card.append(form);
+      pin.focus();
+    }
+
+    api("GET", "/api/auth/link/" + encodeURIComponent(code))
+      .then(render)
+      .catch(ex => {
+        card.innerHTML = "";
+        card.append(h("h2", {}, "❄️ Ops"), h("p", {}, ex.message));
+      });
+  </script>
+</body>
+</html>

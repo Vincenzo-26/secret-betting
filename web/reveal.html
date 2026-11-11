@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1f2a">
+  <title>Rivelazione · Secret Betting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/common.js"></script>
+</head>
+<body>
+  <main class="wrap wide">
+    <header class="brand"><h1 id="title">Secret Betting</h1><p id="sub">✨ La grande rivelazione ✨</p></header>
+    <div id="app"></div>
+  </main>
+
+  <script>
+    let lastKey = "";
+
+    async function tick() {
+      let r;
+      try { r = await api("GET", "/api/reveal"); } catch { return; }
+      const key = JSON.stringify(r);
+      if (key === lastKey) return;   // niente di nuovo: non ri-disegnare (evita di rifare le animazioni)
+      lastKey = key;
+      render(r);
+    }
+
+    function render(r) {
+      $("#title").textContent = r.game.name;
+      const app = $("#app");
+      app.innerHTML = "";
+
+      if (r.game.phase !== "reveal") {
+        app.append(h("section", { class: "card center", style: "max-width:640px;margin:0 auto" },
+          h("div", { class: "gift" }, h("div", { class: "box" }, "🎁")),
+          h("h2", { style: "justify-content:center" }, r.game.phase === "setup" ? "L'estrazione non è ancora stata fatta" : "Lo show sta per iniziare…"),
+          r.game.phase === "playing" ? h("p", {}, `🔮 ${r.submitted} su ${r.players} hanno già consegnato i pronostici`) : null,
+          r.game.phase === "playing" && r.game.deadline ? h("p", { class: "muted" },
+            r.game.guesses_open ? `Pronostici aperti fino a ${fmtDate(r.game.deadline)}` : "Pronostici chiusi") : null));
+        return;
+      }
+
+      $("#sub").textContent = r.complete ? "🏆 Classifica finale" : `Coppia ${r.step} di ${r.total}`;
+      const stage = h("div", { class: "stage" });
+
+      // ---------- coppie
+      const left = h("section", { class: "card" });
+      const last = r.pairs[r.pairs.length - 1];
+      if (r.complete && r.leaderboard.length) {
+        const winners = r.leaderboard.filter(x => x.rank === 1).map(x => x.name);
+        left.append(h("div", { class: "spotlight" },
+          h("div", { class: "gift" }, h("div", { class: "box" }, "🏆")),
+          h("div", { class: "winner" }, winners.length > 1 ? `Pari merito: ${winners.join(", ")}!` : `Vince ${winners[0]}!`),
+          h("p", { class: "muted" }, `con ${r.leaderboard[0].points} punti`)));
+      } else if (last) {
+        left.append(h("div", { class: "spotlight" },
+          h("div", { class: "pair" }, h("span", {}, last.giver), h("span", { class: "to" }, "🎁→"), h("span", {}, last.receiver)),
+          h("p", { class: "muted" }, last.hits === 0 ? "Nessuno l'aveva indovinata! 😱" :
+            last.hits === 1 ? "Solo 1 persona l'aveva indovinata" : `${last.hits} persone l'avevano indovinata`)));
+      } else {
+        left.append(h("div", { class: "spotlight" }, h("div", { class: "gift" }, h("div", { class: "box" }, "🎁")),
+          h("h2", { style: "justify-content:center" }, "Pronti? Si parte!")));
+      }
+      if (r.pairs.length) {
+        const list = h("ul", { class: "list" });
+        r.pairs.slice().reverse().forEach(p => list.append(h("li", {},
+          h("b", {}, p.giver), " → ", h("b", {}, p.receiver), h("span", { class: "spacer" }),
+          h("span", { class: "pill grey" }, `${p.hits} 🎯`))));
+        left.append(h("h3", {}, "Coppie svelate"), list);
+      }
+
+      // ---------- classifica
+      const right = h("section", { class: "card" }, h("h2", {}, "🏅 Classifica"));
+      const board = h("ul", { class: "list board" });
+      for (const x of r.leaderboard) {
+        board.append(h("li", { class: x.rank === 1 && x.points > 0 ? "first" : "" },
+          h("span", { class: "rank" }, x.points === 0 ? x.rank + "°" : x.rank === 1 ? "🥇" : x.rank === 2 ? "🥈" : x.rank === 3 ? "🥉" : x.rank + "°"),
+          h("span", {}, x.name, x.bonus ? " ⭐" : ""),
+          h("span", { class: "spacer" }),
+          h("span", { class: "pts" }, x.points)));
+      }
+      right.append(board, h("p", { class: "small muted" }, "⭐ = ha indovinato chi gli fa il regalo"));
+
+      stage.append(left, right);
+      app.append(stage);
+
+      // ---------- tutti gli indizi distribuiti (solo a rivelazione completata)
+      if (r.complete && r.hints && r.hints.length) {
+        const list = h("ul", { class: "list" });
+        for (const x of r.hints) {
+          const chip = h("span", { class: "chip" }, `${x.trait}: ${x.value}`);
+          const text = x.kind === "santa_of"
+            ? h("span", {}, "Chi fa il regalo a ", h("b", {}, x.subject), " ha ", chip)
+            : h("span", {}, h("b", {}, x.subject), " fa il regalo a qualcuno con ", chip);
+          list.append(h("li", { style: "flex-wrap:wrap" },
+            h("span", { class: "pill grey" }, `${x.player} #${x.slot}`), text, h("span", { class: "spacer" }),
+            x.is_true ? h("span", { class: "pill" }, "✅ Vero") : h("span", { class: "pill red" }, "❌ Falso")));
+        }
+        app.append(h("section", { class: "card", style: "margin-top:20px" }, h("h2", {}, "🕵️ Gli indizi distribuiti"), list));
+      }
+    }
+
+    tick();
+    setInterval(tick, 2000);
+  </script>
+</body>
+</html>

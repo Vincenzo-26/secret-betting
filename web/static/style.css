@@ -1,0 +1,248 @@
+:root {
+  --night: #0b1f2a;
+  --night-2: #12313f;
+  --pine: #1f6f4a;
+  --pine-dark: #155238;
+  --berry: #c8202f;
+  --berry-dark: #9e1724;
+  --gold: #f2c14e;
+  --snow: #fdfbf7;
+  --card: #fffdf8;
+  --ink: #1d2b30;
+  --muted: #6b7a80;
+  --line: #e7dfd2;
+  --ok: #1f8a4c;
+  --bad: #c8202f;
+  --radius: 18px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .25);
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; min-height: 100%; }
+
+body {
+  font-family: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #1d4a5c 0%, transparent 60%),
+    linear-gradient(180deg, var(--night) 0%, var(--night-2) 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------- neve */
+.snow { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.flake {
+  position: absolute; top: -10px; color: #fff; opacity: .8;
+  animation: fall linear infinite;
+  user-select: none;
+}
+@keyframes fall {
+  to { transform: translateY(110vh) translateX(var(--drift, 20px)) rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) { .snow { display: none; } }
+
+/* -------------------------------------------------------------- layout */
+.wrap { position: relative; z-index: 1; max-width: 640px; margin: 0 auto; padding: 20px 16px 120px; }
+.wrap.wide { max-width: 1100px; }
+
+.brand {
+  text-align: center; color: var(--snow); margin: 10px 0 22px;
+}
+.brand h1 {
+  font-family: "Mountains of Christmas", Georgia, serif;
+  font-size: clamp(2.2rem, 8vw, 3.4rem); margin: 0; line-height: 1;
+  text-shadow: 0 3px 0 var(--berry-dark), 0 6px 18px rgba(0,0,0,.4);
+  letter-spacing: .5px;
+}
+.brand p { margin: 8px 0 0; opacity: .85; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  color: var(--snow); margin-bottom: 14px;
+}
+.topbar .who { font-weight: 800; font-size: 1.1rem; }
+
+.card {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 20px; margin-bottom: 16px; position: relative; overflow: hidden;
+}
+.card::before {
+  /* nastro natalizio */
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px;
+  background: repeating-linear-gradient(45deg, var(--berry) 0 12px, var(--snow) 12px 24px, var(--pine) 24px 36px, var(--snow) 36px 48px);
+}
+.card h2 {
+  margin: 4px 0 12px; font-size: 1.25rem; display: flex; align-items: center; gap: 8px;
+}
+.card h3 { margin: 18px 0 8px; font-size: 1rem; }
+
+.muted { color: var(--muted); }
+.small { font-size: .875rem; }
+.center { text-align: center; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row.end { justify-content: flex-end; }
+.spacer { flex: 1; }
+.hidden { display: none !important; }
+
+/* --------------------------------------------------------------- input */
+label { display: block; font-weight: 700; margin: 12px 0 6px; font-size: .95rem; }
+input, select {
+  width: 100%; font: inherit; color: var(--ink);
+  padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); background: #fff;
+  outline: none; transition: border-color .15s;
+}
+input:focus, select:focus { border-color: var(--pine); }
+input[type="checkbox"] { width: auto; }
+.pin-input { font-size: 1.6rem; letter-spacing: .5em; text-align: center; }
+
+.btn {
+  appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 800;
+  padding: 12px 18px; border-radius: 999px; color: #fff; background: var(--pine);
+  box-shadow: 0 4px 0 var(--pine-dark); transition: transform .05s, filter .15s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--pine-dark); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.red { background: var(--berry); box-shadow: 0 4px 0 var(--berry-dark); }
+.btn.gold { background: var(--gold); color: var(--ink); box-shadow: 0 4px 0 #c99a2a; }
+.btn.ghost { background: transparent; color: inherit; box-shadow: none; border: 2px solid currentColor; }
+.btn.small { padding: 6px 12px; font-size: .85rem; }
+.btn.block { width: 100%; }
+.link-btn { background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
+
+/* -------------------------------------------------------------- badge */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  font-size: .8rem; font-weight: 800; background: #eef3ef; color: var(--pine-dark);
+}
+.pill.red { background: #fbe9eb; color: var(--berry-dark); }
+.pill.gold { background: #fdf3d8; color: #8a6510; }
+.pill.grey { background: #eef0f1; color: var(--muted); }
+
+/* --------------------------------------------------------------- regalo */
+.gift {
+  width: 100%; border: 0; cursor: pointer; background: none; padding: 10px 0; font: inherit;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--ink);
+}
+.gift .box { font-size: 4.5rem; line-height: 1; animation: wiggle 2.4s ease-in-out infinite; }
+@keyframes wiggle { 0%, 80%, 100% { transform: rotate(0); } 85% { transform: rotate(-8deg); } 90% { transform: rotate(8deg); } 95% { transform: rotate(-4deg); } }
+.gift .target {
+  font-family: "Mountains of Christmas", Georgia, serif; font-size: 2.6rem; font-weight: 700; color: var(--berry);
+}
+
+/* ------------------------------------------------------------ pronostici */
+.progress { height: 10px; background: #eef0f1; border-radius: 99px; overflow: hidden; margin: 6px 0 14px; }
+.progress > div { height: 100%; background: linear-gradient(90deg, var(--pine), #3aa36f); transition: width .3s; }
+
+.guess {
+  display: grid; grid-template-columns: minmax(90px, 38%) auto 1fr auto; align-items: center; gap: 8px;
+  padding: 10px 0; border-bottom: 1px dashed var(--line);
+}
+.guess:last-child { border-bottom: 0; }
+.guess .giver { font-weight: 800; overflow: hidden; text-overflow: ellipsis; }
+.guess .arrow { color: var(--muted); }
+.guess .mark { width: 1.6em; text-align: center; font-size: 1.1rem; }
+.guess.fixed { opacity: .75; }
+.guess.fixed .fixed-val { font-weight: 700; padding: 12px 0; }
+.guess select { padding: 10px 12px; }
+
+.savebar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(11, 31, 42, .92); backdrop-filter: blur(6px);
+  display: flex; justify-content: center;
+}
+.savebar .inner { width: 100%; max-width: 640px; display: flex; gap: 10px; align-items: center; color: var(--snow); }
+
+/* -------------------------------------------------------------- tabelle */
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.table-scroll { overflow-x: auto; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.list { list-style: none; padding: 0; margin: 0; }
+.list li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+
+/* ---------------------------------------------------------------- toast */
+.toast {
+  position: fixed; left: 50%; top: 16px; transform: translateX(-50%) translateY(-120%);
+  background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 12px; z-index: 50;
+  box-shadow: var(--shadow); transition: transform .25s; max-width: calc(100% - 32px); font-weight: 700;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.error { background: var(--berry); }
+.toast.success { background: var(--pine); }
+
+.error-msg { color: var(--bad); font-weight: 700; margin-top: 10px; min-height: 1.2em; }
+
+.footer { text-align: center; color: rgba(255,255,255,.55); font-size: .85rem; margin-top: 24px; }
+.footer a { color: inherit; }
+
+/* ---------------------------------------------------------- rivelazione */
+.stage { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 860px) { .stage { grid-template-columns: 1fr; } }
+.spotlight { text-align: center; padding: 30px 10px; }
+.spotlight .pair {
+  font-family: "Mountains of Christmas", Georgia, serif; font-size: clamp(2rem, 6vw, 4rem); font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: .4em; flex-wrap: wrap;
+  animation: pop .6s cubic-bezier(.2, 1.6, .4, 1);
+}
+.spotlight .pair .to { color: var(--berry); }
+@keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.board li { font-size: 1.1rem; }
+.board .rank { width: 2.2em; font-weight: 900; color: var(--muted); }
+.board .pts { font-weight: 900; font-size: 1.2rem; }
+.board li.first { background: #fdf3d8; border-radius: 10px; padding-left: 6px; }
+.winner { font-family: "Mountains of Christmas", Georgia, serif; font-size: clamp(2rem, 5vw, 3.2rem); color: var(--berry); text-align: center; }
+
+/* ------------------------------------------------- popup regolamento */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+  padding: 56px 14px 20px; background: rgba(6, 18, 25, .72); backdrop-filter: blur(3px);
+  animation: fade .2s ease-out;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  position: relative; width: 100%; max-width: 480px; max-height: calc(100vh - 80px);
+  /* cornice a bastoncino di zucchero */
+  padding: 10px; border-radius: 26px;
+  background: repeating-linear-gradient(45deg, var(--berry) 0 12px, #fff 12px 24px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .5);
+  animation: pop .45s cubic-bezier(.2, 1.4, .4, 1);
+  display: flex;
+}
+.modal-inner {
+  background: var(--card); border-radius: 17px; padding: 40px 18px 18px; overflow-y: auto; width: 100%;
+}
+.modal h2 {
+  font-family: "Mountains of Christmas", Georgia, serif; font-size: 2.2rem; color: var(--berry);
+  text-align: center; margin: 0 0 12px; line-height: 1.1;
+}
+.mistletoe { position: absolute; top: -44px; left: 50%; transform: translateX(-50%); width: 130px; pointer-events: none; }
+.cane { position: absolute; bottom: -14px; width: 34px; pointer-events: none; }
+.cane.left { left: -12px; transform: rotate(-12deg); }
+.cane.right { right: -12px; transform: scaleX(-1) rotate(-12deg); }
+.rules { list-style: none; padding: 0; margin: 0 0 18px; }
+.rules li { display: flex; gap: 10px; padding: 7px 0; font-size: .93rem; border-bottom: 1px dashed var(--line); line-height: 1.4; }
+.rules li:last-child { border-bottom: 0; }
+.rules .ico { font-size: 1.2rem; flex: 0 0 auto; width: 1.6em; text-align: center; }
+
+/* ---------------------------------------------------------------- indizi */
+.hint { border: 2px dashed var(--gold); border-radius: 14px; padding: 12px; margin: 10px 0; background: #fffaf0; }
+.hint.locked { border-color: var(--line); background: #f7f5f1; }
+.hint-text { margin-top: 8px; line-height: 1.7; }
+.chip {
+  display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 800;
+  background: var(--berry); color: #fff; white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- schede */
+.schede-table th:first-child, .schede-table td:first-child {
+  position: sticky; left: 0; background: var(--card); z-index: 1; font-weight: 800;
+}
+.schede-table tr.me td { background: #fdf3d8; }
+.schede-table td { white-space: nowrap; }
