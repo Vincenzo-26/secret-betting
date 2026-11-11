@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1f2a">
+  <title>Telecomando · Secret Betting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/common.js"></script>
+</head>
+<body>
+  <main class="wrap remote">
+    <header class="brand"><h1>Telecomando</h1><p>📺 Guarda il maxischermo: qui non si vede nessuna coppia</p></header>
+
+    <section class="card hidden" id="loginCard">
+      <h2>🔐 Accesso admin</h2>
+      <form id="loginForm">
+        <label for="pw">Password</label>
+        <input id="pw" type="password" autocomplete="current-password" required>
+        <div class="error-msg" id="loginErr" role="alert"></div>
+        <button class="btn red block" type="submit">Entra</button>
+      </form>
+    </section>
+
+    <section class="card center hidden" id="pad"></section>
+  </main>
+
+  <script>
+    const pad = $("#pad");
+    let busy = false;
+    let lastKey = "";
+
+    async function load() {
+      let r;
+      try { r = await api("GET", "/api/admin/remote"); }
+      catch (ex) {
+        if (ex.status === 401) { $("#loginCard").classList.remove("hidden"); pad.classList.add("hidden"); }
+        return;
+      }
+      $("#loginCard").classList.add("hidden");
+      pad.classList.remove("hidden");
+      const key = JSON.stringify(r);
+      if (key !== lastKey) { lastKey = key; render(r); }   // ridisegna solo se qualcosa è cambiato
+    }
+
+    async function send(action, confirmText) {
+      if (busy) return;
+      if (confirmText && !confirm(confirmText)) return;
+      busy = true;
+      try {
+        await api("POST", "/api/admin/reveal", { action });
+        if (navigator.vibrate) navigator.vibrate(30);
+      } catch (ex) { toast(ex.message); }
+      busy = false;
+      load();
+    }
+
+    function render(r) {
+      pad.innerHTML = "";
+      if (r.phase === "setup") {
+        pad.append(h("h2", { style: "justify-content:center" }, "⏳ Estrazione non ancora fatta"),
+          h("p", { class: "muted" }, "Il telecomando serve alla serata, per la rivelazione."));
+        return;
+      }
+      if (r.phase === "playing") {
+        pad.append(h("h2", { style: "justify-content:center" }, "🎬 Pronti per lo show?"),
+          h("p", {}, `🔮 ${r.submitted} su ${r.players} hanno consegnato i pronostici`),
+          h("p", { class: "small muted" }, "Iniziando, i pronostici si chiudono per tutti."),
+          h("button", { class: "btn red block remote-big", type: "button",
+            onclick: () => send("start", "Iniziare la rivelazione? I pronostici verranno chiusi.") }, "✨ Inizia la rivelazione"));
+        return;
+      }
+      const done = r.step >= r.total;
+      pad.append(
+        h("div", { class: "remote-count" }, done ? "🏆 Classifica finale" : r.step === 0 ? "Pronti, si parte!" : `Coppia ${r.step} di ${r.total}`),
+        h("div", { class: "progress" }, h("div", { style: `width:${r.total ? 100 * r.step / r.total : 0}%` })),
+        h("button", { class: "btn red block remote-big", type: "button", disabled: done, onclick: () => send("next") },
+          done ? "Tutto svelato 🎉" : r.step + 1 === r.total ? "🏆 Svela l'ultima coppia" : "▶ Svela la prossima"),
+        h("div", { class: "row", style: "margin-top:12px" },
+          h("button", { class: "btn ghost", type: "button", style: "flex:1", disabled: r.step === 0, onclick: () => send("prev") }, "◀ Indietro"),
+          h("button", { class: "btn gold", type: "button", style: "flex:1", disabled: done,
+            onclick: () => send("all", "Svelare subito tutte le coppie rimaste?") }, "⏩ Mostra tutto")));
+      if (r.step === 0) {
+        pad.append(h("button", { class: "btn ghost small", type: "button", style: "margin-top:16px",
+          onclick: () => send("stop") }, "↩ Annulla l'inizio"));
+      }
+    }
+
+    $("#loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("#loginErr").textContent = "";
+      try {
+        await api("POST", "/api/admin/login", { password: $("#pw").value });
+        $("#pw").value = "";
+        load();
+      } catch (ex) { $("#loginErr").textContent = ex.message; }
+    });
+
+    load();
+    // Se qualcuno avanza da un altro dispositivo (o con la barra spaziatrice), resta allineato.
+    setInterval(() => { if (!busy && !document.hidden) load(); }, 3000);
+  </script>
+</body>
+</html>

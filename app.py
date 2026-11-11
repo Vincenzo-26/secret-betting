@@ -10,6 +10,7 @@ import hmac
 import json
 import os
 import secrets
+import socket
 import sqlite3
 import time
 from collections import defaultdict
@@ -17,6 +18,7 @@ from datetime import date, timedelta
 from functools import wraps
 from pathlib import Path
 
+import segno
 from flask import Flask, g, jsonify, request, send_from_directory, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -52,13 +54,15 @@ ADMIN_LOCK_SECONDS = 10 * 60
 
 DEFAULT_SETTINGS = {
     "game_name": "Secret Betting 2026",
-    "deadline": "",          # epoch secondi (UTC) o vuoto
     "phase": "setup",        # setup -> playing -> reveal
     "guesses_closed": "0",   # chiusura manuale dei pronostici
     "reveal_step": "0",
     "bonus_points": "2",     # extra per chi indovina il proprio Santa (totale 1 + 2 = 3)
-    "hint1_at": "",          # sblocco indizio 1 (epoch) o vuoto
-    "hint2_at": "",          # sblocco indizio 2 (epoch) o vuoto
+    "hint1_at": "",          # sblocco indizi 1-2 (epoch) o vuoto
+    "hint2_at": "",          # sblocco indizi 3-4 (epoch) o vuoto
+    "event_at": "",          # data/ora della serata dello scambio (epoch) o vuoto
+    "extra_timer_label": "Concepimento figlio Rocco",  # timer extra (goliardico)
+    "extra_timer_at": "",
 }
 
 MAX_TRAITS = 8
@@ -220,7 +224,9 @@ def guesses_open(s=None):
     s = s or get_settings()
     if s["phase"] != "playing" or s["guesses_closed"] == "1":
         return False
-    if s["deadline"] and time.time() >= float(s["deadline"]):
+    # I pronostici si chiudono all'inizio della serata (così non ci si mette d'accordo parlandone).
+    event_at = _epoch_or_none(s["event_at"])
+    if event_at is not None and time.time() >= event_at:
         return False
     return True
 
@@ -229,11 +235,13 @@ def game_public(s=None):
     s = s or get_settings()
     return {
         "name": s["game_name"],
-        "deadline": float(s["deadline"]) if s["deadline"] else None,
+        "deadline": _epoch_or_none(s["event_at"]),   # la scadenza dei pronostici è la serata
         "phase": s["phase"],
         "guesses_open": guesses_open(s),
         "bonus_points": int(s["bonus_points"]),
         "hint_dates": [_epoch_or_none(s["hint1_at"]), _epoch_or_none(s["hint2_at"])],
+        "event_at": _epoch_or_none(s["event_at"]),
+        "extra_timer": {"label": s["extra_timer_label"], "at": _epoch_or_none(s["extra_timer_at"])},
     }
 
 
@@ -411,9 +419,9 @@ def reveal_page():
     return page("reveal.html")
 
 
-@app.get("/schede")
-def schede_page():
-    return page("schede.html")
+@app.get("/telecomando")
+def remote_page():
+    return page("telecomando.html")
 
 
 # ============================================================ auth giocatore
@@ -524,6 +532,14 @@ def me():
             # Solo le coppie già svelate: {giver_id: receiver_id}
             "revealed": {str(gid): amap[gid] for gid in shown},
         }
+        if len(shown) == len(amap):
+            # A rivelazione completa ognuno può guardare i pronostici degli altri (uno alla volta, nella pagina).
+            results["others"] = [
+                {"id": r["id"], "name": r["name"], "rank": r["rank"], "points": r["points"],
+                 "correct": r["correct"], "bonus": r["bonus"],
+                 "guesses": {str(k): v for k, v in guesses_of(r["id"]).items()}}
+                for r in board if r["id"] != me_row["id"]
+            ]
 
     return ok(
         me={"id": me_row["id"], "name": me_row["name"]},
@@ -564,28 +580,13 @@ def player_hints(player_id, s, names):
     complete = reveal_complete(s)
     out = []
     for row in rows:
-        unlock_at = _epoch_or_none(s.get(f"hint{row['slot']}_at"))
+        unlock_at = _epoch_or_none(s.get(f"hint{logic.hint_group(row['slot'])}_at"))
         unlocked = s["phase"] == "reveal" or (unlock_at is not None and now >= unlock_at)
         item = {"slot": row["slot"], "unlock_at": unlock_at, "unlocked": unlocked}
         if unlocked:
             item.update(_hint_payload(row, names, complete))
         out.append(item)
     return out
-
-
-@app.get("/api/schede")
-@player_required
-def schede():
-    """Tabella pubblica delle caratteristiche (visibile a tutti i giocatori)."""
-    values = trait_values_map()
-    return ok(
-        traits=traits_list(),
-        people=[
-            {"id": p["id"], "name": p["name"], "values": {str(k): v for k, v in values.get(p["id"], {}).items()}}
-            for p in participants()
-        ],
-        me=g.player["id"],
-    )
 
 
 @app.put("/api/me/guesses")
@@ -702,16 +703,7 @@ def admin_settings():
         if not name:
             return fail("Il nome del gioco non può essere vuoto.")
         set_setting("game_name", name)
-    if "deadline" in data:
-        dl = data["deadline"]
-        if dl in (None, ""):
-            set_setting("deadline", "")
-        else:
-            try:
-                set_setting("deadline", float(dl))
-            except (TypeError, ValueError):
-                return fail("Scadenza non valida.")
-    for key in ("hint1_at", "hint2_at"):
+    for key, label in (("hint1_at", "Data indizi 1-2"), ("hint2_at", "Data indizi 3-4"), ("event_at", "Data dell'evento"), ("extra_timer_at", "Data del timer extra")):
         if key in data:
             value = data[key]
             if value in (None, ""):
@@ -720,7 +712,19 @@ def admin_settings():
                 try:
                     set_setting(key, float(value))
                 except (TypeError, ValueError):
-                    return fail("Data indizio non valida.")
+                    return fail(f"{label} non valida.")
+    s = get_settings()
+    ev = _epoch_or_none(s["event_at"])
+    for key, label in (("hint1_at", "indizi 1-2"), ("hint2_at", "indizi 3-4")):
+        at = _epoch_or_none(s[key])
+        if ev is not None and at is not None and at >= ev:
+            return fail(f"Lo sblocco degli {label} deve essere prima della serata "
+                        "(alla serata i pronostici si chiudono).")
+    if "extra_timer_label" in data:
+        label = str(data["extra_timer_label"] or "").strip()[:60]
+        if not label:
+            return fail("Il nome del timer extra non può essere vuoto.")
+        set_setting("extra_timer_label", label)
     if "bonus_points" in data:
         try:
             bp = int(data["bonus_points"])
@@ -1088,6 +1092,48 @@ def reveal_control():
     return ok()
 
 
+@app.get("/api/admin/remote")
+@admin_required
+def remote_state():
+    """Stato minimo per il telecomando: solo contatori, mai le coppie
+    (l'admin gioca anche lui: la coppia la scopre sul maxischermo con gli altri)."""
+    db = get_db()
+    s = get_settings()
+    return ok(
+        phase=s["phase"],
+        step=int(s["reveal_step"]),
+        total=db.execute("SELECT COUNT(*) FROM assignments").fetchone()[0],
+        players=len(participants()),
+        submitted=db.execute(
+            "SELECT COUNT(*) FROM participants WHERE guesses_updated_at IS NOT NULL").fetchone()[0],
+        guesses_open=guesses_open(s),
+    )
+
+
+def lan_ip():
+    """IP del PC nella rete locale (nessun pacchetto viene inviato davvero)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("10.255.255.255", 1))
+            return sock.getsockname()[0]
+    except OSError:
+        return None
+
+
+@app.get("/api/remote-qr")
+def remote_qr():
+    """QR con l'indirizzo del telecomando, da mostrare sul maxischermo.
+    Contiene solo l'indirizzo: per usare il telecomando serve comunque la password admin."""
+    url = app.config.get("REMOTE_URL")
+    if not url:
+        if request.host.split(":")[0] in ("localhost", "127.0.0.1", "[::1]"):
+            # Da localhost il telefono non arriva: se il server non è aperto alla rete, niente QR.
+            return fail("Server non raggiungibile dalla rete locale.", 404)
+        url = request.host_url.rstrip("/") + "/telecomando"
+    qr = segno.make(url, error="m")
+    return ok(url=url, svg=qr.svg_data_uri(scale=8, border=2, dark="#0b1f2a", light="#ffffff"))
+
+
 # =================================================== rivelazione pubblica
 
 @app.get("/api/reveal")
@@ -1118,14 +1164,31 @@ def reveal_state():
         int(s["bonus_points"]),
         {p["id"]: p["guesses_updated_at"] for p in people},
     )
-    # Quanti hanno indovinato ciascuna coppia svelata (senza dire chi).
+    # Per ogni coppia svelata: chi l'aveva indovinata e l'errore più comune.
     pairs = []
     for r in rows:
-        hits = db.execute(
-            "SELECT COUNT(*) FROM guesses WHERE giver_id = ? AND receiver_id = ? AND player_id != ?",
-            (r["giver_id"], r["receiver_id"], r["giver_id"]),
-        ).fetchone()[0]
-        pairs.append({"giver": names[r["giver_id"]], "receiver": names[r["receiver_id"]], "hits": hits})
+        votes = db.execute(
+            "SELECT player_id, receiver_id FROM guesses WHERE giver_id = ? AND player_id != ?",
+            (r["giver_id"], r["giver_id"]),
+        ).fetchall()
+        right = sorted((names[v["player_id"]] for v in votes if v["receiver_id"] == r["receiver_id"]), key=str.lower)
+        wrong = defaultdict(int)
+        for v in votes:
+            if v["receiver_id"] != r["receiver_id"]:
+                wrong[v["receiver_id"]] += 1
+        top_wrong = None
+        if wrong:
+            rid, n = min(wrong.items(), key=lambda kv: (-kv[1], names[kv[0]].lower()))
+            if n >= 2:   # un errore isolato non è una notizia
+                top_wrong = {"receiver": names[rid], "count": n}
+        pairs.append({
+            "giver": names[r["giver_id"]], "receiver": names[r["receiver_id"]], "hits": len(right),
+            "guessed_by": right,
+            # il destinatario aveva indovinato chi gli fa il regalo (bonus)
+            "receiver_knew": any(v["player_id"] == r["receiver_id"] and v["receiver_id"] == r["receiver_id"]
+                                 for v in votes),
+            "top_wrong": top_wrong,
+        })
     all_hints = []
     if step >= total:
         # A rivelazione completa si mostrano tutti gli indizi distribuiti, con vero/falso.
@@ -1151,4 +1214,9 @@ def reveal_state():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5000"))
-    app.run(host=os.environ.get("HOST", "127.0.0.1"), port=port, debug=os.environ.get("DEBUG") == "1")
+    host = os.environ.get("HOST", "127.0.0.1")
+    if os.environ.get("REMOTE_URL"):
+        app.config["REMOTE_URL"] = os.environ["REMOTE_URL"]
+    elif host not in ("127.0.0.1", "localhost") and lan_ip():
+        app.config["REMOTE_URL"] = f"http://{lan_ip()}:{port}/telecomando"
+    app.run(host=host, port=port, debug=os.environ.get("DEBUG") == "1")

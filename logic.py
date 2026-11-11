@@ -77,8 +77,17 @@ def _hint_tier(candidates):
     return 4         # falso e impossibile: nessuno corrisponde
 
 
-def generate_hints(assignments, traits, attrs):
-    """Genera 2 indizi a testa: uno vero e uno falso, in ordine casuale.
+HINTS_PER_PLAYER = 4      # di cui la metà veri
+HINTS_PER_DATE = 2        # indizi 1-2 alla prima data, 3-4 alla seconda
+
+
+def hint_group(slot):
+    """A quale data di sblocco appartiene l'indizio numero `slot` (1-based): 1 o 2."""
+    return (slot - 1) // HINTS_PER_DATE + 1
+
+
+def generate_hints(assignments, traits, attrs, per_player=HINTS_PER_PLAYER):
+    """Genera `per_player` indizi a testa: metà veri e metà falsi, in ordine casuale.
 
     assignments: {giver_id: receiver_id}
     traits: {trait_id: [valori possibili]}
@@ -89,19 +98,23 @@ def generate_hints(assignments, traits, attrs):
       - "gives_to": "G fa il regalo a qualcuno con <caratteristica> = <valore>"  (valore vero = quello di R)
 
     Regole: per il giocatore P si escludono la sua coppia (P -> X) e quella del
-    bonus (chi -> P); i due indizi riguardano coppie diverse; nessuna frase è
-    uguale a quella di un altro giocatore; si preferiscono indizi che, dal punto
-    di vista di P, lasciano 2-3 candidati e coppie usate meno spesso.
+    bonus (chi -> P); ogni indizio di P riguarda una coppia diversa; nessuna frase
+    è uguale a un'altra; ogni "fatto" (tipo + persona + caratteristica) compare
+    al massimo una volta in tutto il gioco, così confrontando gli indizi non si
+    trovano contraddizioni (vincolo morbido: cede solo se le caratteristiche sono
+    troppo poche). Si preferiscono indizi che, dal punto di vista di P, lasciano
+    2-3 candidati e coppie usate meno spesso.
 
-    Restituisce {player_id: [hint, hint]} con hint = dict(kind, subject, trait, value, is_true).
+    Restituisce {player_id: [hint, ...]} con hint = dict(kind, subject, trait, value, is_true).
     """
     if not traits:
         return {}
     ids = list(assignments)
-    if len(ids) < 4:
-        raise GameError("Per gli indizi servono almeno 4 partecipanti.")
+    if len(ids) < per_player + 2:
+        raise GameError(f"Per {per_player} indizi a testa servono almeno {per_player + 2} partecipanti.")
 
     used_statements = set()
+    fact_usage = {}           # (kind, subject, trait) -> quante volte usato
     pair_usage = {g: 0 for g in ids}
     order = ids[:]
     _rng.shuffle(order)
@@ -109,7 +122,7 @@ def generate_hints(assignments, traits, attrs):
 
     for p in order:
         x = assignments[p]
-        truths = [True, False]
+        truths = [True] * (per_player // 2) + [False] * (per_player - per_player // 2)
         _rng.shuffle(truths)
         used_pairs = set()
         hints = []
@@ -128,19 +141,21 @@ def generate_hints(assignments, traits, attrs):
                             subject, true_val = g, attrs[r][tid]
                             # A chi può regalare G, secondo P: tutti tranne G e X (che riceve da P).
                             pool = [c for c in ids if c not in (g, x)]
+                        fact = (kind, subject, tid)
                         values = [true_val] if is_true else [v for v in options if v != true_val]
                         for v in values:
                             stmt = (kind, subject, tid, v)
                             if stmt in used_statements:
                                 continue
                             n = sum(1 for c in pool if attrs[c][tid] == v)
-                            score = (_hint_tier(n), pair_usage[g], _rng.random())
+                            score = (fact_usage.get(fact, 0), _hint_tier(n), pair_usage[g], _rng.random())
                             if best is None or score < best[0]:
                                 best = (score, stmt, g)
             if best is None:
                 raise GameError("Impossibile generare gli indizi: aggiungi caratteristiche o partecipanti.")
             _, (kind, subject, tid, v), g = best
             used_statements.add((kind, subject, tid, v))
+            fact_usage[(kind, subject, tid)] = fact_usage.get((kind, subject, tid), 0) + 1
             used_pairs.add(g)
             pair_usage[g] += 1
             hints.append({"kind": kind, "subject": subject, "trait": tid, "value": v, "is_true": is_true})

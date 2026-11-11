@@ -97,13 +97,14 @@
         ["🎁", "Tocca il pacco per scoprire a chi fai il regalo. È un segreto: non dirlo a nessuno!"],
         ["🔮", "Per ogni altro partecipante pronostica a chi fa il regalo. Ognuno riceve da una sola persona e nessuno regala a se stesso."],
         ["✏️", game.deadline
-          ? `Puoi modificare i pronostici quando vuoi fino a ${fmtDate(game.deadline)}. Ricordati di salvare!`
-          : "Puoi modificare i pronostici quando vuoi fino alla scadenza. Ricordati di salvare!"],
+          ? `Puoi modificare i pronostici quando vuoi fino all'inizio della serata (${fmtDate(game.deadline)}). Ricordati di salvare!`
+          : "Puoi modificare i pronostici quando vuoi fino all'inizio della serata. Ricordati di salvare!"],
+        ["🧩", "Non sei obbligato a pronosticare tutte le coppie: puoi lasciarne qualcuna vuota, conta solo quello che indovini."],
         ["🎯", "Ogni coppia indovinata vale 1 punto."],
         ["⭐", `Se indovini chi fa il regalo a te, quella coppia vale ${santaPts} punti.`],
         ["⏱️", "A parità di punti vince chi ha salvato prima: ogni nuovo salvataggio aggiorna l'orario."],
-        data.has_traits ? ["🕵️", "Riceverai 2 indizi personali, uno alla volta. Attenzione: uno è vero e uno è falso, ma non sai quale!"] : null,
-        data.has_traits ? ["📋", "Usa le Schede dei partecipanti per capire a chi si riferiscono gli indizi."] : null,
+        data.has_traits ? ["🕵️", "Riceverai 4 indizi personali, 2 alla volta in due date diverse. Attenzione: 2 sono veri e 2 sono falsi, ma non sai quali!"] : null,
+        data.has_traits ? ["🧐", "Le caratteristiche degli altri non sono pubbliche: sta a te capire a chi si riferisce ogni indizio."] : null,
         ["🤫", "I pronostici degli altri restano segreti fino alla grande rivelazione alla serata. Alla fine verranno mostrati anche tutti gli indizi distribuiti."],
       ].filter(Boolean);
       const close = () => {
@@ -147,8 +148,7 @@
         status.append(h("p", {}, "⏳ L'estrazione non è ancora stata fatta. Torna qui quando l'admin vi avvisa!"));
       } else if (game.phase === "playing") {
         if (game.guesses_open) {
-          status.append(h("p", {}, h("span", { class: "pill" }, "🟢 Pronostici aperti"),
-            game.deadline ? h("span", { class: "small muted" }, `  fino a ${fmtDate(game.deadline)} (mancano ${countdown(game.deadline)})`) : null));
+          status.append(h("p", {}, h("span", { class: "pill" }, "🟢 Pronostici aperti")));
         } else {
           status.append(h("p", {}, h("span", { class: "pill red" }, "🔒 Pronostici chiusi"),
             h("span", { class: "small muted" }, "  Aspetta la rivelazione alla serata!")));
@@ -158,6 +158,10 @@
           " ", h("a", { href: "/reveal" }, "Guarda la classifica")));
       }
       app.append(status);
+
+      // ---- Conto alla rovescia (indizi + serata)
+      const timers = renderTimers();
+      if (timers) app.append(timers);
 
       // ---- Risultati personali
       if (results) {
@@ -190,8 +194,47 @@
         app.append(h("section", { class: "card" }, h("h2", {}, "🎅 Il tuo Secret Santa"), giftBtn));
         if (data.hints.length) app.append(renderHints());
         app.append(renderGuesses());
+        if (results && results.others) app.append(renderOthers());
       }
       updateSavebar();
+    }
+
+    // Timer: ogni elemento con data-until viene aggiornato ogni secondo da tickTimers().
+    function renderTimers() {
+      const { game } = data;
+      if (game.phase === "reveal") return null;
+      // La serata è anche la chiusura dei pronostici: allo scadere la pagina si ricarica e diventano non modificabili.
+      const items = [
+        ["🎉", "La serata · chiusura pronostici", game.event_at, "Ci siamo! 🎄", true],
+        ["👶", game.extra_timer.label, game.extra_timer.at, "È il momento! 🍼"],
+      ].filter(([, , at]) => at);
+      if (!items.length) return null;
+      const grid = h("div", { class: "timers" });
+      for (const [ico, label, at, doneText, reload] of items) {
+        const clock = h("div", { class: "timer-clock" });
+        clock.dataset.until = at;
+        clock.dataset.done = doneText;
+        if (reload) clock.dataset.reload = "1";   // allo scadere ricarica: i pronostici diventano non modificabili
+        grid.append(h("div", { class: "timer" + (ico === "🎉" ? " event" : ico === "👶" ? " extra" : "") },
+          h("div", { class: "timer-label" }, `${ico} ${label}`),
+          clock,
+          h("div", { class: "small muted" }, fmtDate(at))));
+      }
+      const card = h("section", { class: "card" }, h("h2", {}, "⏰ Conto alla rovescia"), grid);
+      tickTimers(card);
+      return card;
+    }
+
+    function tickTimers(root = document) {
+      const now = Date.now() / 1000;
+      for (const el of root.querySelectorAll("[data-until]")) {
+        const left = Number(el.dataset.until) - now;
+        const box = el.closest(".timer");
+        if (box) box.classList.toggle("done", left <= 0);
+        el.textContent = left <= 0 ? el.dataset.done : countdownClock(left);
+        // Countdown di un indizio arrivato a zero: ricarica per mostrarlo (una volta sola).
+        if (left <= 0 && el.dataset.reload && !el.dataset.reloaded) { el.dataset.reloaded = "1"; setTimeout(load, 1500); }
+      }
     }
 
     function hintSentence(x) {
@@ -203,9 +246,8 @@
 
     function renderHints() {
       const card = h("section", { class: "card" },
-        h("div", { class: "row" }, h("h2", { style: "margin:4px 0" }, "🕵️ I tuoi indizi"), h("span", { class: "spacer" }),
-          h("a", { class: "btn small gold", href: "/schede" }, "📋 Schede")),
-        h("p", { class: "small muted" }, "⚠️ Uno dei due indizi è vero e uno è falso, ma non sai quale!"));
+        h("h2", {}, "🕵️ I tuoi indizi"),
+        h("p", { class: "small muted" }, "⚠️ Due indizi sono veri e due sono falsi, ma non sai quali!"));
       for (const x of data.hints) {
         const box = h("div", { class: "hint" + (x.unlocked ? "" : " locked") });
         const head = h("div", { class: "row" }, h("span", { class: "pill gold" }, `Indizio #${x.slot}`), h("span", { class: "spacer" }));
@@ -216,11 +258,20 @@
         if (x.unlocked) {
           box.append(hintSentence(x));
         } else {
-          box.append(h("div", { class: "hint-text muted" }, "🔒 ",
-            x.unlock_at ? `Si sblocca ${fmtDate(x.unlock_at)} (tra ${countdown(x.unlock_at)})` : "Data di sblocco ancora da definire"));
+          if (x.unlock_at) {
+            const clock = h("span", { class: "hint-clock" });
+            clock.dataset.until = x.unlock_at;
+            clock.dataset.done = "in arrivo… 🎁";
+            clock.dataset.reload = "1";
+            box.append(h("div", { class: "hint-text" }, "🔒 Si sblocca tra ", clock),
+              h("div", { class: "small muted" }, fmtDate(x.unlock_at)));
+          } else {
+            box.append(h("div", { class: "hint-text muted" }, "🔒 Data di sblocco ancora da definire"));
+          }
         }
         card.append(box);
       }
+      tickTimers(card);
       return card;
     }
 
@@ -260,12 +311,17 @@
         if (results) {
           const truth = results.revealed[giver.id];
           if (truth === undefined) mark = "⏳";
+          else if (draft[giver.id] == null) mark = "➖";       // lasciata vuota: non è un errore
           else mark = Number(draft[giver.id]) === truth ? "✅" : "❌";
         }
         const markEl = h("span", { class: "mark", title: results && results.revealed[giver.id] !== undefined
           ? `In realtà: ${nameOf(results.revealed[giver.id])}` : "" }, mark);
         card.append(h("div", { class: "guess" },
           h("span", { class: "giver" }, giver.name), h("span", { class: "arrow" }, "→"), sel, markEl));
+        // Sul telefono il "title" non si vede: la risposta giusta va scritta.
+        if (mark === "❌" || mark === "➖") card.append(h("div", { class: "guess-truth small muted" },
+          (mark === "➖" ? "non pronosticata · " : "") +
+          `in realtà regalava a ${results.revealed[giver.id] === me.id ? "te" : nameOf(results.revealed[giver.id])}`));
       }
 
       function refresh() {
@@ -287,6 +343,48 @@
         updateSavebar();
       }
       refresh();
+      return card;
+    }
+
+    // A rivelazione completa: i pronostici degli altri, una persona alla volta.
+    let othersPick = "";
+    function renderOthers() {
+      const { results, me } = data;
+      const who = (id) => id === me.id ? "te" : nameOf(id);
+      const card = h("section", { class: "card" }, h("h2", {}, "👀 I pronostici degli altri"),
+        h("p", { class: "small muted" }, "Scegli una persona per vedere cosa aveva pronosticato."));
+      const sel = h("select", { "aria-label": "Di chi vuoi vedere i pronostici" },
+        h("option", { value: "" }, "— scegli una persona —"),
+        ...results.others.slice().sort((a, b) => a.name.localeCompare(b.name))
+          .map(o => h("option", { value: o.id }, o.name)));
+      const body = h("div", {});
+      const show = () => {
+        othersPick = sel.value;
+        body.innerHTML = "";
+        const o = results.others.find(x => String(x.id) === sel.value);
+        if (!o) return;
+        body.append(h("p", { style: "font-weight:800;margin-top:12px" },
+          `${o.rank}° posto · ${o.points} punti · ${o.correct} coppie indovinate` + (o.bonus ? " · ⭐ bonus" : "")));
+        // Prima la tua coppia (cosa pensava di te), poi le altre in ordine alfabetico.
+        const givers = data.participants.filter(p => p.id !== o.id)
+          .sort((a, b) => (a.id === me.id ? -1 : b.id === me.id ? 1 : a.name.localeCompare(b.name)));
+        const list = h("ul", { class: "list" });
+        for (const giver of givers) {
+          const guess = o.guesses[giver.id];
+          const truth = results.revealed[giver.id];
+          list.append(h("li", { style: "flex-wrap:wrap" },
+            h("b", {}, giver.id === me.id ? "Tu" : giver.name), "\u00a0→\u00a0",
+            guess === undefined ? h("span", { class: "muted" }, "nessun pronostico") : h("span", {}, who(guess)),
+            h("span", { class: "spacer" }),
+            guess === undefined ? null : guess === truth ? h("span", {}, "✅")
+              : h("span", { class: "small muted" }, `❌ era ${who(truth)}`)));
+        }
+        body.append(list);
+      };
+      sel.value = othersPick;
+      sel.addEventListener("change", show);
+      show();
+      card.append(sel, body);
       return card;
     }
 
@@ -327,6 +425,7 @@
     window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
 
     load();
+    setInterval(() => tickTimers(), 1000);
     // Durante la rivelazione aggiorna i risultati in automatico.
     setInterval(() => { if (data && data.game.phase === "reveal") load(); }, 5000);
     // Quando scocca l'ora di un indizio, ricarica per mostrarlo (senza perdere le modifiche non salvate).

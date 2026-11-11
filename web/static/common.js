@@ -72,6 +72,15 @@ function countdown(epochSec) {
   return `${mm}m`;
 }
 
+// Conto alla rovescia "a orologio": 3g 04:12:09 (secondsLeft > 0).
+function countdownClock(secondsLeft) {
+  const t = Math.floor(secondsLeft);
+  const d = Math.floor(t / 86400);
+  const pad = (n) => String(n).padStart(2, "0");
+  const hms = `${pad(Math.floor(t % 86400 / 3600))}:${pad(Math.floor(t % 3600 / 60))}:${pad(t % 60)}`;
+  return d > 0 ? `${d}g ${hms}` : hms;
+}
+
 function letItSnow(count = 40) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const box = h("div", { class: "snow", "aria-hidden": "true" });

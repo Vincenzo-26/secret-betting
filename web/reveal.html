@@ -19,6 +19,24 @@
 
   <script>
     let lastKey = "";
+    let qr;   // QR del telecomando: chiesto una volta sola (undefined = non ancora, null = non disponibile)
+
+    async function loadQr() {
+      try { qr = await api("GET", "/api/remote-qr"); } catch { qr = null; }
+      return qr;
+    }
+
+    function qrBox() {
+      const box = h("div", { class: "remote-qr hidden" });
+      const fill = (q) => {
+        if (!q) return;
+        box.append(h("img", { src: q.svg, alt: "QR del telecomando" }),
+          h("div", {}, h("b", {}, "📱 Telecomando"), h("div", { class: "small muted" }, "solo per l'admin")));
+        box.classList.remove("hidden");
+      };
+      if (qr === undefined) loadQr().then(fill); else fill(qr);
+      return box;
+    }
 
     async function tick() {
       let r;
@@ -29,9 +47,50 @@
       render(r);
     }
 
+    // Tecnica "FLIP": ogni riga parte dalla posizione vecchia e scivola in quella nuova.
+    function animateBoard(board, before) {
+      if (!before.size || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      for (const li of board.querySelectorAll("li[data-name]")) {
+        const old = before.get(li.dataset.name);
+        if (!old) continue;
+        const dy = old.top - li.getBoundingClientRect().top;
+        const gained = old.pts !== li.dataset.pts;
+        if (dy) {
+          li.style.transition = "none";
+          li.style.transform = `translateY(${dy}px)`;
+          li.style.position = "relative";
+          li.style.zIndex = dy > 0 ? 2 : 1;          // chi sale passa sopra a chi scende
+        }
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          li.style.transition = "transform 1.1s cubic-bezier(.22,.9,.3,1)";
+          li.style.transform = "";
+          if (gained) li.classList.add("scored");
+        }));
+        li.addEventListener("transitionend", () => { li.style.zIndex = ""; }, { once: true });
+      }
+    }
+
+    // Podio: 2° a sinistra, 1° in mezzo (più alto), 3° a destra. A pari merito più nomi sullo stesso gradino.
+    function podium(board) {
+      const ranks = [...new Set(board.map(x => x.rank))].slice(0, 3);
+      const steps = ranks.map((rank, i) => ({ place: i + 1, people: board.filter(x => x.rank === rank) }));
+      const medal = ["🥇", "🥈", "🥉"];
+      const order = [steps[1], steps[0], steps[2]];   // 2 - 1 - 3
+      return h("div", { class: "podium" }, ...order.map(st => !st ? h("div", { class: "podium-col empty" }) :
+        h("div", { class: `podium-col p${st.place}` },
+          h("div", { class: "podium-who" },
+            h("div", { class: "podium-medal" }, medal[st.place - 1]),
+            ...st.people.map(x => h("div", { class: "podium-name" }, x.name, x.bonus ? " ⭐" : "")),
+            h("div", { class: "podium-pts" }, `${st.people[0].points} punti`)),
+          h("div", { class: "podium-step" }, st.place))));
+    }
+
     function render(r) {
       $("#title").textContent = r.game.name;
       const app = $("#app");
+      // Posizioni e punti della classifica PRIMA del ridisegno, per animare gli spostamenti.
+      const before = new Map([...app.querySelectorAll(".board li[data-name]")].map(li =>
+        [li.dataset.name, { top: li.getBoundingClientRect().top, pts: li.dataset.pts }]));
       app.innerHTML = "";
 
       if (r.game.phase !== "reveal") {
@@ -40,7 +99,9 @@
           h("h2", { style: "justify-content:center" }, r.game.phase === "setup" ? "L'estrazione non è ancora stata fatta" : "Lo show sta per iniziare…"),
           r.game.phase === "playing" ? h("p", {}, `🔮 ${r.submitted} su ${r.players} hanno già consegnato i pronostici`) : null,
           r.game.phase === "playing" && r.game.deadline ? h("p", { class: "muted" },
-            r.game.guesses_open ? `Pronostici aperti fino a ${fmtDate(r.game.deadline)}` : "Pronostici chiusi") : null));
+            r.game.guesses_open ? `Pronostici aperti fino a ${fmtDate(r.game.deadline)}` : "Pronostici chiusi") : null),
+          // Prima dello show: QR per collegare il telefono come telecomando (sparisce quando si inizia).
+          r.game.phase === "playing" ? qrBox() : null);
         return;
       }
 
@@ -53,14 +114,19 @@
       if (r.complete && r.leaderboard.length) {
         const winners = r.leaderboard.filter(x => x.rank === 1).map(x => x.name);
         left.append(h("div", { class: "spotlight" },
-          h("div", { class: "gift" }, h("div", { class: "box" }, "🏆")),
-          h("div", { class: "winner" }, winners.length > 1 ? `Pari merito: ${winners.join(", ")}!` : `Vince ${winners[0]}!`),
-          h("p", { class: "muted" }, `con ${r.leaderboard[0].points} punti`)));
+          h("div", { class: "winner late" }, winners.length > 1 ? `Pari merito: ${winners.join(", ")}!` : `Vince ${winners[0]}!`),
+          podium(r.leaderboard)));
       } else if (last) {
         left.append(h("div", { class: "spotlight" },
           h("div", { class: "pair" }, h("span", {}, last.giver), h("span", { class: "to" }, "🎁→"), h("span", {}, last.receiver)),
-          h("p", { class: "muted" }, last.hits === 0 ? "Nessuno l'aveva indovinata! 😱" :
-            last.hits === 1 ? "Solo 1 persona l'aveva indovinata" : `${last.hits} persone l'avevano indovinata`)));
+          last.hits === 0
+            ? h("p", { class: "muted" }, "Nessuno l'aveva indovinata! 😱")
+            : h("div", { class: "guessed-by" },
+                h("div", { class: "small muted" }, last.hits === 1 ? "🎯 L'ha indovinata solo" : `🎯 L'hanno indovinata in ${last.hits}`),
+                h("div", { class: "chips" }, ...last.guessed_by.map(n => h("span", { class: "chip" }, n)))),
+          last.receiver_knew ? h("p", {}, `⭐ ${last.receiver} aveva capito chi gli fa il regalo!`) : null,
+          last.top_wrong ? h("p", { class: "muted" },
+            `😅 In ${last.top_wrong.count} pensavano che ${last.giver} regalasse a ${last.top_wrong.receiver}`) : null));
       } else {
         left.append(h("div", { class: "spotlight" }, h("div", { class: "gift" }, h("div", { class: "box" }, "🎁")),
           h("h2", { style: "justify-content:center" }, "Pronti? Si parte!")));
@@ -77,7 +143,7 @@
       const right = h("section", { class: "card" }, h("h2", {}, "🏅 Classifica"));
       const board = h("ul", { class: "list board" });
       for (const x of r.leaderboard) {
-        board.append(h("li", { class: x.rank === 1 && x.points > 0 ? "first" : "" },
+        board.append(h("li", { class: x.rank === 1 && x.points > 0 ? "first" : "", "data-name": x.name, "data-pts": x.points },
           h("span", { class: "rank" }, x.points === 0 ? x.rank + "°" : x.rank === 1 ? "🥇" : x.rank === 2 ? "🥈" : x.rank === 3 ? "🥉" : x.rank + "°"),
           h("span", {}, x.name, x.bonus ? " ⭐" : ""),
           h("span", { class: "spacer" }),
@@ -87,10 +153,12 @@
 
       stage.append(left, right);
       app.append(stage);
+      animateBoard(board, before);
 
       // ---------- tutti gli indizi distribuiti (solo a rivelazione completata)
       if (r.complete && r.hints && r.hints.length) {
-        const list = h("ul", { class: "list" });
+        // 4 indizi a testa = tanti: su schermo largo vanno su due colonne.
+        const list = h("ul", { class: "list", style: "display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));column-gap:24px" });
         for (const x of r.hints) {
           const chip = h("span", { class: "chip" }, `${x.trait}: ${x.value}`);
           const text = x.kind === "santa_of"
@@ -103,6 +171,23 @@
         app.append(h("section", { class: "card", style: "margin-top:20px" }, h("h2", {}, "🕵️ Gli indizi distribuiti"), list));
       }
     }
+
+    // Tastiera (se questo browser è loggato come admin): spazio / → avanti, ← indietro.
+    // Così si può guidare lo show anche dal PC collegato alla TV, senza telecomando.
+    let keyBusy = false;
+    document.addEventListener("keydown", async (e) => {
+      const action = { " ": "next", "ArrowRight": "next", "PageDown": "next", "ArrowLeft": "prev", "PageUp": "prev" }[e.key];
+      if (!action || keyBusy) return;
+      e.preventDefault();
+      keyBusy = true;
+      try {
+        await api("POST", "/api/admin/reveal", { action });
+        await tick();
+      } catch (ex) {
+        toast(ex.status === 401 ? "Per usare la tastiera accedi prima come admin su questo browser (/admin)" : ex.message);
+      }
+      keyBusy = false;
+    });
 
     tick();
     setInterval(tick, 2000);

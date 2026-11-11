@@ -103,17 +103,17 @@ class LogicTests(unittest.TestCase):
         traits = {1: ["bassa", "media", "alta"], 2: ["biondi", "castani", "neri", "altro"],
                   3: ["mare", "montagna", "città"], 4: ["caffè", "tè", "niente"], 5: ["cane", "gatto", "nessuno"],
                   6: ["sì", "no"]}
-        for n in (5, 8, 12, 15):
+        for n in (6, 8, 12, 15):
             for _ in range(20):
                 ids = list(range(1, n + 1))
                 attrs = {i: {t: random.choice(o) for t, o in traits.items()} for i in ids}
                 assign = logic.draw(ids)
                 santa_of = {r: g for g, r in assign.items()}
                 hints = logic.generate_hints(assign, traits, attrs)
-                statements = set()
+                statements, facts = set(), set()
                 for p, hs in hints.items():
-                    self.assertEqual(len(hs), 2)
-                    self.assertEqual(sorted(x["is_true"] for x in hs), [False, True])  # uno vero, uno falso
+                    self.assertEqual(len(hs), 4)
+                    self.assertEqual(sorted(x["is_true"] for x in hs), [False, False, True, True])  # 2 veri, 2 falsi
                     pairs = set()
                     for x in hs:
                         self.assertEqual(logic.hint_is_true(x, assign, attrs), x["is_true"])
@@ -124,7 +124,11 @@ class LogicTests(unittest.TestCase):
                         st = (x["kind"], x["subject"], x["trait"], x["value"])
                         self.assertNotIn(st, statements)              # nessun indizio uguale
                         statements.add(st)
-                    self.assertEqual(len(pairs), 2)                   # due coppie diverse
+                        fact = st[:3]
+                        if n >= 8:
+                            self.assertNotIn(fact, facts)             # nessun fatto ripetuto (niente contraddizioni)
+                        facts.add(fact)
+                    self.assertEqual(len(pairs), 4)                   # quattro coppie diverse
 
     def test_derived_traits(self):
         from datetime import date
@@ -145,6 +149,11 @@ class LogicTests(unittest.TestCase):
         for spec_kind, spec in logic.DERIVED_TRAITS.items():
             self.assertGreaterEqual(len(spec["options"]), 2)
 
+    def test_hint_groups(self):
+        self.assertEqual([logic.hint_group(s) for s in (1, 2, 3, 4)], [1, 1, 2, 2])
+        with self.assertRaises(logic.GameError):
+            logic.generate_hints(logic.draw([1, 2, 3, 4, 5]), {1: ["a", "b"]}, {i: {1: "a"} for i in range(1, 6)})
+
     def test_no_traits_no_hints(self):
         self.assertEqual(logic.generate_hints({1: 2, 2: 3, 3: 1}, {}, {}), {})
 
@@ -164,7 +173,7 @@ class ApiTests(unittest.TestCase):
                          "DELETE FROM assignments; DELETE FROM exclusions; DELETE FROM participants;")
         db.execute("UPDATE settings SET value='setup' WHERE key='phase'")
         db.execute("UPDATE settings SET value='0' WHERE key IN ('guesses_closed','reveal_step')")
-        db.execute("UPDATE settings SET value='' WHERE key IN ('deadline','hint1_at','hint2_at')")
+        db.execute("UPDATE settings SET value='' WHERE key IN ('hint1_at','hint2_at','event_at','extra_timer_at')")
         db.commit()
         db.close()
         self.admin = self.app.test_client()
@@ -193,6 +202,104 @@ class ApiTests(unittest.TestCase):
         anna = self.login(people["Anna"]["code"])
         self.assertEqual(anna.get("/api/admin/state").status_code, 401)
         self.assertEqual(anna.post("/api/admin/reveal", json={"action": "start"}).status_code, 401)
+
+    def test_remote_control(self):
+        people = self.add_people(["Anna", "Bruno", "Carla", "Dario"])
+        anna = self.login(people["Anna"]["code"])
+        self.assertEqual(anna.get("/api/admin/remote").status_code, 401)     # solo admin
+        self.assertEqual(self.app.test_client().get("/telecomando").status_code, 200)
+        self.admin.post("/api/admin/draw", json={})
+        r = self.admin.get("/api/admin/remote").get_json()
+        self.assertEqual((r["phase"], r["step"], r["total"], r["players"]), ("playing", 0, 4, 4))
+        self.admin.post("/api/admin/reveal", json={"action": "start"})
+        self.admin.post("/api/admin/reveal", json={"action": "next"})
+        r = self.admin.get("/api/admin/remote").get_json()
+        self.assertEqual((r["phase"], r["step"]), ("reveal", 1))
+        for name in people:                                                 # nessun nome: niente coppie
+            self.assertNotIn(name, str(r))
+
+    def test_remote_qr(self):
+        c = self.app.test_client()
+        self.app.config.pop("REMOTE_URL", None)
+        self.assertEqual(c.get("/api/remote-qr").status_code, 404)           # da localhost il telefono non arriva
+        r = c.get("/api/remote-qr", base_url="https://amici.example.org").get_json()
+        self.assertEqual(r["url"], "https://amici.example.org/telecomando")   # online: indirizzo del sito
+        self.assertTrue(r["svg"].startswith("data:image/svg+xml"))
+        self.app.config["REMOTE_URL"] = "http://192.168.1.20:5056/telecomando"
+        try:
+            self.assertEqual(c.get("/api/remote-qr").get_json()["url"], "http://192.168.1.20:5056/telecomando")
+        finally:
+            self.app.config.pop("REMOTE_URL", None)
+        self.assertEqual(c.get("/api/admin/remote").status_code, 401)        # il QR non dà accesso: serve la password
+
+    def test_guesses_close_at_event(self):
+        import time
+        people = self.add_people(["Anna", "Bruno", "Carla", "Dario"])
+        self.admin.post("/api/admin/draw", json={})
+        anna = self.login(people["Anna"]["code"])
+        me = anna.get("/api/me").get_json()
+        other = next(p for n, p in people.items() if n not in ("Anna",) and p["id"] != me["assignment"]["id"])
+        target = next(p for n, p in people.items() if p["id"] not in (other["id"], me["assignment"]["id"]))
+        partial = {str(other["id"]): target["id"]}                         # un solo pronostico: va bene
+        self.assertEqual(anna.put("/api/me/guesses", json={"guesses": partial}).status_code, 200)
+        # La serata è la scadenza
+        self.admin.put("/api/admin/settings", json={"event_at": time.time() + 3600})
+        g = anna.get("/api/me").get_json()["game"]
+        self.assertTrue(g["guesses_open"])
+        self.assertEqual(g["deadline"], g["event_at"])
+        self.admin.put("/api/admin/settings", json={"event_at": time.time() - 1})
+        self.assertFalse(anna.get("/api/me").get_json()["game"]["guesses_open"])
+        self.assertEqual(anna.put("/api/me/guesses", json={"guesses": partial}).status_code, 403)
+        # Gli indizi devono sbloccarsi prima della serata (e un salvataggio rifiutato non cambia niente)
+        ev = time.time() + 86400
+        self.admin.put("/api/admin/settings", json={"event_at": ev})
+        r = self.admin.put("/api/admin/settings", json={"hint2_at": ev + 60})
+        self.assertEqual(r.status_code, 400)
+        self.assertIsNone(self.admin.get("/api/admin/state").get_json()["game"]["hint_dates"][1])
+
+    def test_reveal_top_wrong_guess(self):
+        people = self.add_people(["Anna", "Bruno", "Carla", "Dario", "Elena", "Fabio"])
+        self.admin.post("/api/admin/draw", json={})
+        cl = {n: self.login(p["code"]) for n, p in people.items()}
+        me = {n: cl[n].get("/api/me").get_json() for n in people}
+        ids = {n: p["id"] for n, p in people.items()}
+        truth = {ids[n]: me[n]["assignment"]["id"] for n in people}
+        # Si cerca un giver e un destinatario sbagliato che almeno due giocatori possano scegliere.
+        for giver, real in truth.items():
+            for wrong in ids.values():
+                if wrong in (giver, real):
+                    continue
+                voters = [n for n in people if ids[n] != giver and truth[ids[n]] != wrong]
+                if len(voters) >= 2:
+                    break
+            else:
+                continue
+            break
+        for n in voters[:2]:
+            r = cl[n].put("/api/me/guesses", json={"guesses": {str(giver): wrong}})
+            self.assertEqual(r.status_code, 200, r.get_json())
+        self.admin.post("/api/admin/reveal", json={"action": "start"})
+        self.admin.post("/api/admin/reveal", json={"action": "all"})
+        pair = next(x for x in self.app.test_client().get("/api/reveal").get_json()["pairs"]
+                    if x["giver"] == next(n for n in people if ids[n] == giver))
+        wrong_name = next(n for n in people if ids[n] == wrong)
+        self.assertEqual(pair["top_wrong"], {"receiver": wrong_name, "count": 2})
+        self.assertEqual(pair["guessed_by"], [])
+
+    def test_event_date_setting(self):
+        people = self.add_people(["Anna", "Bruno", "Carla"])
+        anna = self.login(people["Anna"]["code"])
+        self.assertIsNone(anna.get("/api/me").get_json()["game"]["event_at"])
+        self.assertEqual(self.admin.put("/api/admin/settings",
+                         json={"extra_timer_label": "Timer prova", "extra_timer_at": 1798736400}).status_code, 200)
+        self.assertEqual(anna.get("/api/me").get_json()["game"]["extra_timer"], {"label": "Timer prova", "at": 1798736400})
+        self.assertEqual(self.admin.put("/api/admin/settings", json={"extra_timer_label": "  "}).status_code, 400)
+        self.assertEqual(self.admin.put("/api/admin/settings", json={"event_at": 1798736400}).status_code, 200)
+        self.assertEqual(anna.get("/api/me").get_json()["game"]["event_at"], 1798736400)
+        self.assertEqual(self.admin.get("/api/admin/state").get_json()["game"]["event_at"], 1798736400)
+        self.assertEqual(self.admin.put("/api/admin/settings", json={"event_at": "boh"}).status_code, 400)
+        self.assertEqual(self.admin.put("/api/admin/settings", json={"event_at": ""}).status_code, 200)
+        self.assertIsNone(anna.get("/api/me").get_json()["game"]["event_at"])
 
     def test_database_not_served(self):
         anon = self.app.test_client()
@@ -239,10 +346,23 @@ class ApiTests(unittest.TestCase):
         # Estrazione non annullabile dopo che qualcuno l'ha vista
         self.assertEqual(self.admin.post("/api/admin/undo-draw", json={}).status_code, 409)
 
-        # Rivelazione completa
+        # Rivelazione: durante lo show nessuno vede ancora i pronostici degli altri
         self.admin.post("/api/admin/reveal", json={"action": "start"})
         self.assertEqual(clients["Anna"].put("/api/me/guesses", json={"guesses": anna_guess}).status_code, 403)
+        self.admin.post("/api/admin/reveal", json={"action": "next"})
+        self.assertNotIn("others", clients["Bruno"].get("/api/me").get_json()["results"])
+        pub = self.app.test_client().get("/api/reveal").get_json()
+        first = pub["pairs"][0]
+        self.assertEqual(first["guessed_by"], [] if first["giver"] == "Anna" else ["Anna"])   # Anna ha tutto giusto
+        self.assertEqual(first["hits"], len(first["guessed_by"]))
+        self.assertEqual(first["receiver_knew"], first["receiver"] == "Anna" and first["giver"] != "Anna")
+
+        # Rivelazione completa: ora Bruno vede i pronostici di Anna (e degli altri)
         self.admin.post("/api/admin/reveal", json={"action": "all"})
+        others = {o["name"]: o for o in clients["Bruno"].get("/api/me").get_json()["results"]["others"]}
+        self.assertEqual(set(others), set(names) - {"Bruno"})
+        self.assertEqual(others["Anna"]["guesses"], anna_guess)
+        self.assertEqual(others["Carla"]["guesses"], {})
         pub = self.app.test_client().get("/api/reveal").get_json()
         self.assertTrue(pub["complete"])
         top = pub["leaderboard"][0]
@@ -291,33 +411,38 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(self.admin.post("/api/admin/draw", json={}).status_code, 200)
         state = self.admin.get("/api/admin/state").get_json()
-        self.assertEqual(state["hints_count"], 2 * len(names))
+        self.assertEqual(state["hints_count"], 4 * len(names))
         self.assertNotIn("Chi fa", str(state))
         # Dopo l'estrazione le caratteristiche non si toccano più
         self.assertEqual(self.admin.post("/api/admin/traits", json={"name": "Y", "options": "a,b,c"}).status_code, 400)
 
         anna = self.login(people["Anna"]["code"])
-        # Le schede sono visibili ai giocatori
-        sch = anna.get("/api/schede").get_json()
-        self.assertEqual(len(sch["people"]), len(names))
-        self.assertEqual(self.app.test_client().get("/api/schede").status_code, 401)
+        # Le schede NON sono visibili ai giocatori: né pagina né API
+        self.assertEqual(anna.get("/api/schede").status_code, 404)
+        self.assertEqual(anna.get("/schede").status_code, 404)
+        me = anna.get("/api/me").get_json()
+        self.assertTrue(all(set(p) <= {"id", "name"} for p in me["participants"]), me["participants"])
+        self.assertNotIn("Altezza", str(me))   # indizi ancora bloccati: nessuna caratteristica
 
         # Senza date: indizi bloccati, nessun contenuto inviato
         hints = anna.get("/api/me").get_json()["hints"]
-        self.assertEqual(len(hints), 2)
+        self.assertEqual(len(hints), 4)
         for x in hints:
             self.assertFalse(x["unlocked"])
             self.assertNotIn("value", x)
             self.assertNotIn("is_true", x)
 
-        # Indizio 1 sbloccato, 2 nel futuro
+        # Prima data passata (indizi 1-2 sbloccati), seconda nel futuro (3-4 bloccati)
         self.admin.put("/api/admin/settings", json={"hint1_at": _time.time() - 10, "hint2_at": _time.time() + 3600})
         hints = anna.get("/api/me").get_json()["hints"]
-        self.assertTrue(hints[0]["unlocked"])
-        self.assertIn("value", hints[0])
-        self.assertNotIn("is_true", hints[0])        # vero/falso resta segreto
-        self.assertFalse(hints[1]["unlocked"])
-        self.assertNotIn("value", hints[1])
+        self.assertEqual([x["slot"] for x in hints], [1, 2, 3, 4])
+        for x in hints[:2]:
+            self.assertTrue(x["unlocked"])
+            self.assertIn("value", x)
+            self.assertNotIn("is_true", x)        # vero/falso resta segreto
+        for x in hints[2:]:
+            self.assertFalse(x["unlocked"])
+            self.assertNotIn("value", x)
 
         # Rivelazione parziale: tutti sbloccati ma nessun vero/falso, nessun elenco pubblico
         self.admin.post("/api/admin/reveal", json={"action": "start"})
@@ -329,18 +454,19 @@ class ApiTests(unittest.TestCase):
         # Rivelazione completa: compaiono tutti gli indizi con vero/falso
         self.admin.post("/api/admin/reveal", json={"action": "all"})
         pub = self.app.test_client().get("/api/reveal").get_json()
-        self.assertEqual(len(pub["hints"]), 2 * len(names))
-        self.assertEqual(sum(x["is_true"] for x in pub["hints"]), len(names))
+        self.assertEqual(len(pub["hints"]), 4 * len(names))
+        self.assertEqual(sum(x["is_true"] for x in pub["hints"]), 2 * len(names))
         hints = anna.get("/api/me").get_json()["hints"]
-        self.assertEqual(sorted(x["is_true"] for x in hints), [False, True])
+        self.assertEqual(sorted(x["is_true"] for x in hints), [False, False, True, True])
 
     def test_birthdate_traits_api(self):
-        people = self.add_people(["Anna", "Bruno", "Carla", "Dario"])
+        people = self.add_people(["Anna", "Bruno", "Carla", "Dario", "Elena", "Fabio"])
         self.assertEqual(self.admin.post("/api/admin/traits", json={"derived": "segno"}).status_code, 200)
         self.assertEqual(self.admin.post("/api/admin/traits", json={"derived": "eta"}).status_code, 200)
         self.assertEqual(self.admin.post("/api/admin/traits", json={"derived": "segno"}).status_code, 400)  # doppione
         self.assertEqual(self.admin.post("/api/admin/traits", json={"derived": "boh"}).status_code, 400)
-        dates = {"Anna": "1990-08-01", "Bruno": "1992-03-21", "Carla": "1995-12-25", "Dario": "1998-01-10"}
+        dates = {"Anna": "1990-08-01", "Bruno": "1992-03-21", "Carla": "1995-12-25", "Dario": "1998-01-10",
+                 "Elena": "1993-06-15", "Fabio": "1996-02-02"}
         for n, dt in dates.items():
             r = self.admin.put(f"/api/admin/participants/{people[n]['id']}/birthdate", json={"birthdate": dt})
             self.assertEqual(r.status_code, 200, r.get_json())
@@ -368,7 +494,7 @@ class ApiTests(unittest.TestCase):
 
         # La data di nascita non arriva mai ai giocatori
         anna = self.login(people["Anna"]["code"])
-        for payload in (anna.get("/api/schede").get_json(), anna.get("/api/me").get_json()):
+        for payload in (anna.get("/api/me").get_json(),):
             text = str(payload)
             for dt in dates.values():
                 self.assertNotIn(dt, text)

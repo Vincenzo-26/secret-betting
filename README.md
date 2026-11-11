@@ -10,7 +10,15 @@ e si stila la classifica.
 - Nei pronostici ognuno riceve da una sola persona e nessuno regala a se stesso.
 - **1 punto** per ogni coppia indovinata. Se indovini chi fa il regalo **a te**, quella coppia
   vale **3 punti** (1 + bonus di 2, configurabile dall'admin).
-- I pronostici degli altri restano nascosti; si possono modificare fino alla scadenza.
+- **Dopo la rivelazione** i pronostici diventano visibili, a piccole dosi:
+  - sul maxischermo, per ogni coppia svelata: chi l'aveva indovinata, se il destinatario aveva
+    capito chi gli fa il regalo, e l'errore più comune ("in 5 pensavano che…");
+  - a rivelazione completa, nella pagina personale: i propri pronostici con ✅/❌ e la risposta
+    giusta, più "👀 I pronostici degli altri", una persona alla volta.
+- I pronostici degli altri restano nascosti fino ad allora; si possono modificare fino all'**inizio della serata**
+  (la data dell'evento è anche la scadenza, così non ci si mette d'accordo parlandone).
+  Gli sblocchi degli indizi devono essere prima della serata.
+- Non è obbligatorio pronosticare tutte le coppie: conta solo quello che si indovina.
 - **Spareggio:** a pari punti è più in alto chi ha salvato i pronostici prima. Conta l'ultimo
   salvataggio, quindi ogni modifica aggiorna l'orario.
 
@@ -18,15 +26,17 @@ e si stila la classifica.
 
 - L'admin definisce 5-6 **caratteristiche** uguali per tutti, ognuna con almeno 2 valori
   (es. Altezza: bassa / media / alta), e compila la **scheda** di ogni partecipante.
-  Le schede sono visibili a tutti i giocatori (pagina `/schede`, con filtro per valore).
-- All'estrazione l'app genera **2 indizi a testa**, senza che nessuno li veda (admin compreso):
-  - **uno vero e uno falso**, in ordine casuale (i giocatori lo sanno, ma non sanno quale);
+  Le schede le vede solo l'admin: i giocatori hanno solo i propri indizi e devono capire da soli a chi si riferiscono.
+- All'estrazione l'app genera **4 indizi a testa**, senza che nessuno li veda (admin compreso):
+  - **2 veri e 2 falsi**, in ordine casuale (i giocatori lo sanno, ma non sanno quali);
   - mai sulla propria coppia né su quella del bonus (chi regala a te);
-  - su due coppie diverse, e nessuna frase è uguale a quella di un altro giocatore;
+  - su quattro coppie diverse, e nessuna frase è uguale a quella di un altro giocatore;
+  - ogni "fatto" (es. *l'altezza di chi regala a X*) compare una sola volta in tutto il gioco,
+    così confrontando gli indizi tra giocatori non si trovano contraddizioni;
   - ogni indizio lascia, dal punto di vista di chi lo riceve, 2-3 candidati possibili.
 - Due tipi: "Chi fa il regalo a **X** ha *Capelli: neri*" e
   "**X** fa il regalo a qualcuno con *Altezza: alta*".
-- Si sbloccano da soli alle date impostate dall'admin (indizio 1 e indizio 2). Il contenuto
+- Si sbloccano da soli, 2 alla volta, alle due date impostate dall'admin (indizi 1-2 e 3-4). Il contenuto
   di un indizio bloccato non lascia mai il server.
 - A rivelazione completata, `/reveal` mostra tutti gli indizi distribuiti con ✅ vero / ❌ falso.
 - Caratteristiche e schede si possono modificare solo prima dell'estrazione.
@@ -40,9 +50,9 @@ e si stila la classifica.
 |-------------|-----------------|---------------------------------------------------------------------------|
 | `/p/<link>` | ogni giocatore  | primo accesso: si sceglie un PIN; poi si entra con il PIN                 |
 | `/me`       | giocatore       | il proprio abbinamento (tocca per scoprirlo) e i pronostici              |
-| `/admin`    | admin           | partecipanti, vincoli, scadenza, estrazione, chiusura, rivelazione        |
+| `/admin`    | admin           | partecipanti, vincoli, date, estrazione, chiusura, rivelazione        |
 | `/reveal`   | tutti (TV)      | rivelazione coppia per coppia e classifica in diretta                    |
-| `/schede`   | giocatori       | tabella delle caratteristiche di tutti, per decifrare gli indizi          |
+| `/telecomando` | admin (cellulare) | pulsanti grandi per svelare le coppie una alla volta (non mostra le coppie). Prima dello show `/reveal` mostra un QR per aprirlo: serve comunque la password admin |
 
 ## Sicurezza / privacy
 
@@ -74,6 +84,17 @@ Copia `.env.example` in `.env` e imposta `ADMIN_PASSWORD`, poi:
 ```
 
 Apri http://localhost:5000/admin.
+
+Scorciatoie (doppio clic):
+
+| File | Cosa fa |
+|------|---------|
+| `apri_admin.bat` | accende il server (se spento) e apre l'admin |
+| `apri_profilo.bat` | accende il server e apre il proprio profilo (nome in cima al file) |
+| `prova_estrazione.bat` | estrazione di prova su una **copia** del database (porta 5056) e apre il profilo |
+| `prova_rivelazione.bat` | come sopra + pronostici casuali per tutti; apre `/reveal` sul PC con il QR del telecomando da inquadrare col cellulare (stessa wifi) |
+
+Le prove non toccano mai `instance/secret_santa.db`.
 
 Test:
 

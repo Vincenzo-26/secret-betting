@@ -246,3 +246,61 @@ th { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: 
 }
 .schede-table tr.me td { background: #fdf3d8; }
 .schede-table td { white-space: nowrap; }
+
+/* Conto alla rovescia (pagina personale) */
+.timers { display: flex; flex-wrap: wrap; gap: 10px; }
+.timer { flex: 1 1 150px; border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; text-align: center; background: #fffdf8; }
+.timer.event { border-color: var(--gold); background: #fffaf0; }
+.timer.done { opacity: .75; }
+.timer-label { font-weight: 800; }
+.timer-clock { font-size: 1.5rem; font-weight: 900; color: var(--berry-dark); font-variant-numeric: tabular-nums; margin: 4px 0; }
+.timer.done .timer-clock { font-size: 1.1rem; color: inherit; }
+.timer.extra { flex-basis: 100%; border-style: dashed; }
+.hint-clock { font-weight: 900; font-size: 1.2rem; color: var(--berry-dark); font-variant-numeric: tabular-nums; }
+
+/* Telecomando (cellulare) */
+.wrap.remote { max-width: 480px; }
+.remote-count { font-size: 1.6rem; font-weight: 900; margin: 6px 0 12px; }
+.remote-big { font-size: 1.5rem; padding: 26px 18px; margin-top: 18px; border-radius: 20px; }
+.remote-big:disabled { opacity: .5; }
+.remote-qr { position: fixed; right: 20px; bottom: 20px; display: flex; align-items: center; gap: 12px;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); border-radius: 16px;
+  padding: 10px 16px 10px 10px; text-align: left; color: #fff; }
+.remote-qr .muted { color: rgba(255,255,255,.7); }
+.remote-qr img { width: 120px; height: 120px; border-radius: 8px; display: block; }
+
+/* Classifica: chi ha appena preso punti si illumina mentre scivola al suo posto */
+.board li { will-change: transform; }
+.board li.scored { animation: scored 1.8s ease-out; }
+.board li.scored .pts { animation: pts-pop .6s ease-out .4s; display: inline-block; }
+@keyframes scored { 0% { background: #d9f2df; box-shadow: 0 4px 16px rgba(31,122,76,.35); } 100% { background: transparent; box-shadow: none; } }
+@keyframes pts-pop { 0% { transform: scale(1); } 40% { transform: scale(1.6); color: var(--pine, #1f7a4c); } 100% { transform: scale(1); } }
+
+/* ---------- podio finale */
+.podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; margin: 22px auto 0; max-width: 460px; }
+.podium-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.podium-who { text-align: center; padding-bottom: 8px; opacity: 0; animation: pop .5s ease-out forwards; }
+.podium-medal { font-size: 2.4rem; line-height: 1.1; }
+.podium-name { font-weight: 900; font-size: 1.15rem; overflow-wrap: anywhere; }
+.podium-pts { color: var(--muted); font-weight: 700; font-size: .95rem; }
+.podium-step { width: 100%; border-radius: 12px 12px 0 0; display: flex; justify-content: center; align-items: flex-start;
+  padding-top: 10px; font-family: "Mountains of Christmas", Georgia, serif; font-size: 2.6rem; color: #fff;
+  transform-origin: bottom; transform: scaleY(0); animation: rise .8s cubic-bezier(.22,.9,.3,1) forwards; }
+.podium-col.p1 .podium-step { height: 170px; background: linear-gradient(180deg, var(--gold), #d9a42c); }
+.podium-col.p2 .podium-step { height: 120px; background: linear-gradient(180deg, #c9d2d6, #9aa8ae); }
+.podium-col.p3 .podium-step { height: 85px;  background: linear-gradient(180deg, #d99a63, #b0703e); }
+.podium-col.p1 .podium-name { font-size: 1.45rem; color: var(--berry); }
+/* sale prima il 3°, poi il 2°, per ultimo il 1° */
+.podium-col.p3 .podium-step { animation-delay: .2s; }  .podium-col.p3 .podium-who { animation-delay: .9s; }
+.podium-col.p2 .podium-step { animation-delay: 1s; }   .podium-col.p2 .podium-who { animation-delay: 1.7s; }
+.podium-col.p1 .podium-step { animation-delay: 1.9s; } .podium-col.p1 .podium-who { animation-delay: 2.7s; }
+@keyframes rise { to { transform: scaleY(1); } }
+.winner.late { opacity: 0; animation: pop .6s ease-out 3.2s forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .podium-step, .podium-who, .winner.late { animation: none; transform: none; opacity: 1; }
+}
+
+/* ---------- chi ha indovinato la coppia (rivelazione) e risposta giusta nei pronostici */
+.guessed-by { margin-top: 10px; }
+.guessed-by .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 6px; }
+.guess-truth { text-align: right; margin: -4px 0 6px; }

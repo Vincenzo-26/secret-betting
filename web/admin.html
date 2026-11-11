@@ -74,8 +74,8 @@
       <section class="card">
         <h2>🧩 Caratteristiche per gli indizi</h2>
         <p class="small muted">5-6 caratteristiche uguali per tutti, ognuna con almeno 2 valori (es. Altezza: bassa, media, alta oppure Fidanzato: sì, no).
-          All'estrazione l'app crea 2 indizi a testa, uno vero e uno falso, senza che nessuno (nemmeno tu) li veda.
-          Le schede sono visibili a tutti i giocatori.</p>
+          All'estrazione l'app crea 4 indizi a testa, 2 veri e 2 falsi, senza che nessuno (nemmeno tu) li veda. Si sbloccano 2 alla volta, alle due date qui sotto.
+          Le schede le vedi solo tu: i giocatori conoscono solo i propri indizi.</p>
         <ul class="list" id="traitList"></ul>
         <div id="derivedBox" style="margin-top:12px"></div>
         <form id="traitForm" class="row" style="margin-top:10px">
@@ -98,10 +98,6 @@
               <label for="sName">Nome del gioco</label>
               <input id="sName" maxlength="80" required>
             </div>
-            <div style="flex:2;min-width:200px">
-              <label for="sDeadline">Scadenza pronostici</label>
-              <input id="sDeadline" type="datetime-local">
-            </div>
             <div style="flex:1;min-width:120px">
               <label for="sBonus">Punti extra se indovini il tuo Santa</label>
               <input id="sBonus" type="number" min="0" max="10" step="1">
@@ -109,12 +105,26 @@
           </div>
           <div class="row">
             <div style="flex:1;min-width:200px">
-              <label for="sHint1">🕵️ Sblocco indizio 1</label>
+              <label for="sHint1">🕵️ Sblocco indizi 1-2</label>
               <input id="sHint1" type="datetime-local">
             </div>
             <div style="flex:1;min-width:200px">
-              <label for="sHint2">🕵️ Sblocco indizio 2</label>
+              <label for="sHint2">🕵️ Sblocco indizi 3-4</label>
               <input id="sHint2" type="datetime-local">
+            </div>
+            <div style="flex:1;min-width:200px">
+              <label for="sEvent">🎉 Serata (chiude anche i pronostici)</label>
+              <input id="sEvent" type="datetime-local">
+            </div>
+          </div>
+          <div class="row">
+            <div style="flex:2;min-width:200px">
+              <label for="sExtraLabel">👶 Timer extra: nome</label>
+              <input id="sExtraLabel" maxlength="60">
+            </div>
+            <div style="flex:1;min-width:200px">
+              <label for="sExtraAt">👶 Timer extra: data</label>
+              <input id="sExtraAt" type="datetime-local">
             </div>
           </div>
           <div class="row end" style="margin-top:14px"><button class="btn" type="submit">💾 Salva impostazioni</button></div>
@@ -193,9 +203,9 @@
         const done = st.participants.filter(p => p.guesses > 0 && p.guesses === p.guesses_total).length;
         add(box,
           h("p", {}, `👀 ${viewed}/${n} hanno visto il proprio abbinamento · 🔮 ${done}/${n} hanno completato i pronostici`),
-          st.hints_count ? h("p", {}, `🕵️ ${st.hints_count} indizi pronti (2 a testa) · indizio 1: ${hintDates[0]} · indizio 2: ${hintDates[1]}`) : null,
+          st.hints_count ? h("p", {}, `🕵️ ${st.hints_count} indizi pronti (4 a testa) · indizi 1-2: ${hintDates[0]} · indizi 3-4: ${hintDates[1]}`) : null,
           h("p", {}, game.guesses_open ? h("span", { class: "pill" }, "🟢 Pronostici aperti") : h("span", { class: "pill red" }, "🔒 Pronostici chiusi"),
-            game.deadline ? h("span", { class: "small muted" }, `  scadenza: ${fmtDate(game.deadline)}`) : h("span", { class: "small muted" }, "  nessuna scadenza impostata")),
+            game.deadline ? h("span", { class: "small muted" }, `  si chiudono alla serata: ${fmtDate(game.deadline)}`) : h("span", { class: "small muted" }, "  data della serata non impostata")),
           h("div", { class: "row" },
             h("button", { class: "btn ghost small", style: "color:var(--ink)", onclick: () =>
               act("POST", "/api/admin/guesses", { closed: game.guesses_open }, game.guesses_open ? "Pronostici chiusi" : "Pronostici riaperti")
@@ -325,7 +335,7 @@
           h("div", { class: "actions" }, missingDerived.map(([k, label]) =>
             h("button", { class: "btn small ghost", style: "color:var(--ink)", type: "button",
               onclick: () => act("POST", "/api/admin/traits", { derived: k }, `${label} aggiunta`) }, `➕ ${label}`))),
-          h("p", { class: "small muted" }, "Inserisci la data nella colonna 📅 delle schede. La data la vedi solo tu: ai giocatori arrivano solo i valori calcolati."));
+          h("p", { class: "small muted" }, "Inserisci la data nella colonna 📅 delle schede. Data e schede le vedi solo tu: ai giocatori arrivano solo i propri indizi."));
       }
 
       // ---------- schede
@@ -369,10 +379,12 @@
       // ---------- impostazioni (solo al primo caricamento o dopo il salvataggio, per non sovrascrivere ciò che stai scrivendo)
       if (fillSettings) {
         $("#sName").value = game.name;
-        $("#sDeadline").value = toLocalInput(game.deadline);
         $("#sBonus").value = game.bonus_points;
         $("#sHint1").value = toLocalInput(game.hint_dates[0]);
         $("#sHint2").value = toLocalInput(game.hint_dates[1]);
+        $("#sEvent").value = toLocalInput(game.event_at);
+        $("#sExtraLabel").value = game.extra_timer.label;
+        $("#sExtraAt").value = toLocalInput(game.extra_timer.at);
       }
     }
 
@@ -424,10 +436,12 @@
       const toEpoch = (v) => v ? new Date(v).getTime() / 1000 : "";
       const ok = await act("PUT", "/api/admin/settings", {
         game_name: $("#sName").value,
-        deadline: toEpoch($("#sDeadline").value),
         bonus_points: Number($("#sBonus").value || 0),
         hint1_at: toEpoch($("#sHint1").value),
         hint2_at: toEpoch($("#sHint2").value),
+        event_at: toEpoch($("#sEvent").value),
+        extra_timer_label: $("#sExtraLabel").value,
+        extra_timer_at: toEpoch($("#sExtraAt").value),
       }, "Impostazioni salvate");
       if (ok) render(true);
     });
