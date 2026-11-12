@@ -555,6 +555,9 @@ def me():
         results=results,
         hints=player_hints(me_row["id"], s, names),
         has_traits=bool(traits_list()),
+        # Vincoli (es. coppie dell'anno scorso): nei pronostici quei nomi non si possono scegliere.
+        exclusions=[[r["giver_id"], r["receiver_id"]] for r in
+                    db.execute("SELECT giver_id, receiver_id FROM exclusions ORDER BY giver_id, receiver_id")],
     )
 
 
@@ -611,7 +614,8 @@ def save_guesses():
     if not isinstance(raw, dict):
         return fail("Formato non valido.")
     ids = [p["id"] for p in participants()]
-    clean = logic.validate_guesses(me_row["id"], a["receiver_id"], ids, raw)
+    forbidden = [(r["giver_id"], r["receiver_id"]) for r in db.execute("SELECT giver_id, receiver_id FROM exclusions")]
+    clean = logic.validate_guesses(me_row["id"], a["receiver_id"], ids, raw, forbidden)
 
     now = time.time()
     db.execute("DELETE FROM guesses WHERE player_id = ?", (me_row["id"],))

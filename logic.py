@@ -235,16 +235,18 @@ def reveal_order(ids):
 
 # ---------------------------------------------------------------- pronostici
 
-def validate_guesses(player_id, my_receiver_id, participant_ids, guesses):
+def validate_guesses(player_id, my_receiver_id, participant_ids, guesses, forbidden=()):
     """Valida i pronostici di un giocatore e restituisce {giver_id: receiver_id}.
 
     Regole:
     - non si pronostica la propria coppia (è già nota);
     - nessuno regala a se stesso;
     - la persona che ho pescato io non può ricevere da altri;
-    - ognuno riceve da una sola persona (niente destinatari ripetuti).
+    - ognuno riceve da una sola persona (niente destinatari ripetuti);
+    - le coppie vietate dai vincoli (`forbidden`: coppie (giver, receiver)) non si possono scegliere.
     I pronostici possono essere parziali.
     """
+    forbidden = set(forbidden)
     ids = set(participant_ids)
     clean = {}
     for g, r in guesses.items():
@@ -260,6 +262,8 @@ def validate_guesses(player_id, my_receiver_id, participant_ids, guesses):
             raise GameError("Nessuno può fare il regalo a se stesso.")
         if r == my_receiver_id:
             raise GameError("La persona che hai pescato riceve già il regalo da te.")
+        if (g, r) in forbidden:
+            raise GameError("Uno dei pronostici è una coppia esclusa dai vincoli.")
         clean[g] = r
     if len(set(clean.values())) != len(clean):
         raise GameError("Ognuno riceve il regalo da una sola persona: hai ripetuto un destinatario.")

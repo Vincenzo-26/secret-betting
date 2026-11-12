@@ -44,6 +44,8 @@ class LogicTests(unittest.TestCase):
         ids = [1, 2, 3, 4]
         # giocatore 1 ha pescato 2
         self.assertEqual(logic.validate_guesses(1, 2, ids, {"3": "4", "4": "1"}), {3: 4, 4: 1})
+        with self.assertRaises(GameError):
+            logic.validate_guesses(1, 2, ids, {"3": "4"}, forbidden=[(3, 4)])
         bad = [
             {"1": "3"},            # la propria coppia
             {"3": "3"},            # regalo a se stesso
@@ -285,6 +287,23 @@ class ApiTests(unittest.TestCase):
         wrong_name = next(n for n in people if ids[n] == wrong)
         self.assertEqual(pair["top_wrong"], {"receiver": wrong_name, "count": 2})
         self.assertEqual(pair["guessed_by"], [])
+
+    def test_exclusions_in_guesses(self):
+        people = self.add_people(["Anna", "Bruno", "Carla", "Dario", "Elena"])
+        ids = {n: p["id"] for n, p in people.items()}
+        r = self.admin.post("/api/admin/exclusions", json={"giver_id": ids["Bruno"], "receiver_id": ids["Carla"], "both": False})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        self.admin.post("/api/admin/draw", json={})
+        anna = self.login(people["Anna"]["code"])
+        me = anna.get("/api/me").get_json()
+        self.assertEqual(me["exclusions"], [[ids["Bruno"], ids["Carla"]]])
+        mine = me["assignment"]["id"]
+        if mine != ids["Carla"]:
+            r = anna.put("/api/me/guesses", json={"guesses": {str(ids["Bruno"]): ids["Carla"]}})
+            self.assertEqual(r.status_code, 400)
+            self.assertIn("vincoli", r.get_json()["error"])
+        ok_target = next(i for n, i in ids.items() if n not in ("Bruno", "Carla") and i != mine)
+        self.assertEqual(anna.put("/api/me/guesses", json={"guesses": {str(ids["Bruno"]): ok_target}}).status_code, 200)
 
     def test_event_date_setting(self):
         people = self.add_people(["Anna", "Bruno", "Carla"])

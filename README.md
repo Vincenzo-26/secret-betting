@@ -8,6 +8,8 @@ e si stila la classifica.
 
 - La propria coppia è già nota, quindi non si pronostica e non conta per il punteggio.
 - Nei pronostici ognuno riceve da una sola persona e nessuno regala a se stesso.
+- I **vincoli** (es. le coppie dell'anno scorso) valgono anche nei pronostici: quei nomi compaiono
+  come non selezionabili («🚫 vincolo»), quindi i giocatori li conoscono.
 - **1 punto** per ogni coppia indovinata. Se indovini chi fa il regalo **a te**, quella coppia
   vale **3 punti** (1 + bonus di 2, configurabile dall'admin).
 - **Dopo la rivelazione** i pronostici diventano visibili, a piccole dosi:

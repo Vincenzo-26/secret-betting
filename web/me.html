@@ -98,7 +98,7 @@
       const rules = [
         ["🎁", "Tocca il pacco per scoprire a chi fai il regalo. È un segreto: non dirlo a nessuno!"],
         ["🔮", "Per ogni altro partecipante pronostica a chi fa il regalo. Ognuno riceve da una sola persona e nessuno regala a se stesso."],
-        ["🚫", "Ci sono dei vincoli: nessuno può fare il regalo alla stessa persona dell'anno scorso, l'estrazione ha escluso quelle coppie. Nei pronostici però il menu non le blocca: tocca a te ricordartele ed evitarle (sarebbero pronostici sicuramente sbagliati)."],
+        ["🚫", "Ci sono dei vincoli: nessuno può fare il regalo alla stessa persona dell'anno scorso, l'estrazione ha escluso quelle coppie. Nei pronostici quei nomi compaiono come non selezionabili (🚫 vincolo)."],
         ["✏️", game.deadline
           ? `Puoi modificare i pronostici quando vuoi fino all'inizio della serata (${fmtDate(game.deadline)}). Ricordati di salvare!`
           : "Puoi modificare i pronostici quando vuoi fino all'inizio della serata. Ricordati di salvare!"],
@@ -324,6 +324,9 @@
           `in realtà regalava a ${results.revealed[giver.id] === me.id ? "te" : nameOf(results.revealed[giver.id])}`));
       }
 
+      // Vincoli: "giver|receiver" non selezionabili.
+      const banned = new Set((data.exclusions || []).map(([g, r]) => `${g}|${r}`));
+
       function refresh() {
         const used = new Map(); // receiverId -> giverId
         for (const [g, r] of Object.entries(draft)) used.set(String(r), g);
@@ -332,9 +335,10 @@
             if (!opt.value) continue;
             const owner = used.get(opt.value);
             const taken = owner !== undefined && owner !== sel.dataset.giver;
-            opt.disabled = taken;
+            const excluded = banned.has(`${sel.dataset.giver}|${opt.value}`);
+            opt.disabled = taken || excluded;
             const base = Number(opt.value) === me.id ? "⭐ Me" : nameOf(opt.value);
-            opt.textContent = taken ? `${base} · già assegnato` : base;
+            opt.textContent = excluded ? `${base} · 🚫 vincolo` : taken ? `${base} · già assegnato` : base;
           }
         }
         const n = Object.keys(draft).length;
