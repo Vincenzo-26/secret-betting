@@ -174,6 +174,9 @@ def migrate(db):
         db.execute("ALTER TABLE participants ADD COLUMN birthdate TEXT")      # YYYY-MM-DD, solo admin
     if "derived" not in columns("traits"):
         db.execute("ALTER TABLE traits ADD COLUMN derived TEXT")              # es. "stagione"; NULL = manuale
+    if "phrase" not in columns("traits"):
+        # Solo per caratteristiche sì/no: frase al positivo, es. "è attualmente un baediano".
+        db.execute("ALTER TABLE traits ADD COLUMN phrase TEXT")
 
 
 def init_db():
@@ -248,7 +251,8 @@ def game_public(s=None):
 def traits_list():
     rows = get_db().execute("SELECT * FROM traits ORDER BY position, id").fetchall()
     return [
-        {"id": r["id"], "name": r["name"], "options": json.loads(r["options"]), "derived": r["derived"]}
+        {"id": r["id"], "name": r["name"], "options": json.loads(r["options"]), "derived": r["derived"],
+         "phrase": r["phrase"]}
         for r in rows
     ]
 
@@ -561,6 +565,9 @@ def _hint_payload(row, names, show_truth):
         "trait": row["trait_name"],
         "value": row["value"],
     }
+    if row["trait_phrase"]:
+        item["phrase"] = row["trait_phrase"]   # l'indizio diventa una frase (vedi hintNodes in common.js)
+        item["yes_no"] = logic.is_yes_no(json.loads(row["trait_options"]))
     if show_truth:
         item["is_true"] = bool(row["is_true"])
     return item
@@ -572,7 +579,7 @@ def player_hints(player_id, s, names):
     if s["phase"] not in ("playing", "reveal"):
         return []
     rows = get_db().execute(
-        "SELECT h.*, t.name AS trait_name FROM hints h JOIN traits t ON t.id = h.trait_id "
+        "SELECT h.*, t.name AS trait_name, t.phrase AS trait_phrase, t.options AS trait_options FROM hints h JOIN traits t ON t.id = h.trait_id "
         "WHERE h.player_id = ? ORDER BY h.slot",
         (player_id,),
     ).fetchall()
@@ -956,6 +963,25 @@ def edit_trait(tid):
     return ok()
 
 
+@app.put("/api/admin/traits/<int:tid>/phrase")
+@admin_required
+def edit_trait_phrase(tid):
+    """Frase con cui l'indizio è scritto. Cambia solo la forma, non il contenuto,
+    quindi si può modificare anche dopo l'estrazione.
+    - sì/no: frase al positivo, es. "è fidanzato/a" (il "non" lo aggiunge l'app);
+    - più valori: parte prima del valore, es. "è" per Altezza -> "è Alto/a"."""
+    db = get_db()
+    row = db.execute("SELECT options FROM traits WHERE id = ?", (tid,)).fetchone()
+    if row is None:
+        return fail("Caratteristica non trovata.", 404)
+    phrase = " ".join(str(body().get("phrase") or "").split())[:60]
+    if logic.is_yes_no(json.loads(row["options"])) and phrase.lower().startswith("non "):
+        return fail("Scrivi la frase al positivo (es. «è fidanzato/a»): il «non» lo aggiunge l'app.")
+    db.execute("UPDATE traits SET phrase = ? WHERE id = ?", (phrase or None, tid))
+    db.commit()
+    return ok()
+
+
 @app.delete("/api/admin/traits/<int:tid>")
 @admin_required
 def delete_trait(tid):
@@ -1193,7 +1219,7 @@ def reveal_state():
     if step >= total:
         # A rivelazione completa si mostrano tutti gli indizi distribuiti, con vero/falso.
         rows = db.execute(
-            "SELECT h.*, t.name AS trait_name FROM hints h JOIN traits t ON t.id = h.trait_id "
+            "SELECT h.*, t.name AS trait_name, t.phrase AS trait_phrase, t.options AS trait_options FROM hints h JOIN traits t ON t.id = h.trait_id "
             "ORDER BY h.player_id, h.slot"
         ).fetchall()
         all_hints = [

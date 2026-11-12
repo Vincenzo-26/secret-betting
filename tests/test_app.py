@@ -415,8 +415,16 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn("Chi fa", str(state))
         # Dopo l'estrazione le caratteristiche non si toccano più
         self.assertEqual(self.admin.post("/api/admin/traits", json={"name": "Y", "options": "a,b,c"}).status_code, 400)
+        # ...ma la frase delle caratteristiche sì/no sì (cambia solo come è scritto l'indizio)
+        phrase_url = f"/api/admin/traits/{tids['Fidanzato']}/phrase"
+        self.assertEqual(self.admin.put(phrase_url, json={"phrase": "non è fidanzato"}).status_code, 400)
+        self.assertEqual(self.admin.put(f"/api/admin/traits/{tids['Altezza']}/phrase", json={"phrase": "è"}).status_code, 200)
+        self.assertEqual(self.admin.put(phrase_url, json={"phrase": "  è   fidanzato/a "}).status_code, 200)
+        phrases = {t["name"]: t["phrase"] for t in self.admin.get("/api/admin/state").get_json()["traits"]}
+        self.assertEqual(phrases, {"Altezza": "è", "Capelli": None, "Fidanzato": "è fidanzato/a"})
 
         anna = self.login(people["Anna"]["code"])
+        self.assertEqual(anna.put(phrase_url, json={"phrase": "x"}).status_code, 401)   # solo admin
         # Le schede NON sono visibili ai giocatori: né pagina né API
         self.assertEqual(anna.get("/api/schede").status_code, 404)
         self.assertEqual(anna.get("/schede").status_code, 404)
@@ -432,6 +440,8 @@ class ApiTests(unittest.TestCase):
             self.assertNotIn("value", x)
             self.assertNotIn("is_true", x)
 
+        self.assertNotIn("fidanzato/a", str(hints))   # la frase non esce con gli indizi bloccati
+
         # Prima data passata (indizi 1-2 sbloccati), seconda nel futuro (3-4 bloccati)
         self.admin.put("/api/admin/settings", json={"hint1_at": _time.time() - 10, "hint2_at": _time.time() + 3600})
         hints = anna.get("/api/me").get_json()["hints"]
@@ -440,6 +450,8 @@ class ApiTests(unittest.TestCase):
             self.assertTrue(x["unlocked"])
             self.assertIn("value", x)
             self.assertNotIn("is_true", x)        # vero/falso resta segreto
+            self.assertEqual(x.get("phrase"), {"Fidanzato": "è fidanzato/a", "Altezza": "è"}.get(x["trait"]))
+            self.assertEqual(x.get("yes_no"), {"Fidanzato": True, "Altezza": False}.get(x["trait"]))
         for x in hints[2:]:
             self.assertFalse(x["unlocked"])
             self.assertNotIn("value", x)

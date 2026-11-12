@@ -37,6 +37,7 @@
     let draft = {};         // { giverId: receiverId } (stringhe)
     let dirty = false;
     let revealedOpen = false;
+    let rulesShown = false;
 
     const app = $("#app");
 
@@ -60,10 +61,11 @@
       }
       render();
       $("#rulesBtn").classList.remove("hidden");
-      // Al primo accesso (su questo telefono) mostra il regolamento.
-      const seenKey = `sb_rules_seen_${data.me.id}`;
-      if (!localStorage.getItem(seenKey) && !$(".modal-backdrop")) {
-        showRules(() => localStorage.setItem(seenKey, "1"));
+      // Ogni volta che si apre il profilo mostra il regolamento (una volta per apertura:
+      // i ricaricamenti automatici della pagina non lo riaprono).
+      if (!rulesShown && !$(".modal-backdrop")) {
+        rulesShown = true;
+        showRules();
       }
     }
 
@@ -96,6 +98,7 @@
       const rules = [
         ["🎁", "Tocca il pacco per scoprire a chi fai il regalo. È un segreto: non dirlo a nessuno!"],
         ["🔮", "Per ogni altro partecipante pronostica a chi fa il regalo. Ognuno riceve da una sola persona e nessuno regala a se stesso."],
+        ["🚫", "Ci sono dei vincoli: nessuno può fare il regalo alla stessa persona dell'anno scorso, l'estrazione ha escluso quelle coppie. Nei pronostici però il menu non le blocca: tocca a te ricordartele ed evitarle (sarebbero pronostici sicuramente sbagliati)."],
         ["✏️", game.deadline
           ? `Puoi modificare i pronostici quando vuoi fino all'inizio della serata (${fmtDate(game.deadline)}). Ricordati di salvare!`
           : "Puoi modificare i pronostici quando vuoi fino all'inizio della serata. Ricordati di salvare!"],
@@ -238,10 +241,7 @@
     }
 
     function hintSentence(x) {
-      const chip = h("span", { class: "chip" }, `${x.trait}: ${x.value}`);
-      return x.kind === "santa_of"
-        ? h("div", { class: "hint-text" }, "Chi fa il regalo a ", h("b", {}, x.subject), " ha ", chip)
-        : h("div", { class: "hint-text" }, h("b", {}, x.subject), " fa il regalo a qualcuno con ", chip);
+      return h("div", { class: "hint-text" }, ...hintNodes(x));
     }
 
     function renderHints() {

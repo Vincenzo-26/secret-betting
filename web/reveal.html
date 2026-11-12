@@ -160,10 +160,7 @@
         // 4 indizi a testa = tanti: su schermo largo vanno su due colonne.
         const list = h("ul", { class: "list", style: "display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));column-gap:24px" });
         for (const x of r.hints) {
-          const chip = h("span", { class: "chip" }, `${x.trait}: ${x.value}`);
-          const text = x.kind === "santa_of"
-            ? h("span", {}, "Chi fa il regalo a ", h("b", {}, x.subject), " ha ", chip)
-            : h("span", {}, h("b", {}, x.subject), " fa il regalo a qualcuno con ", chip);
+          const text = h("span", {}, ...hintNodes(x));
           list.append(h("li", { style: "flex-wrap:wrap" },
             h("span", { class: "pill grey" }, `${x.player} #${x.slot}`), text, h("span", { class: "spacer" }),
             x.is_true ? h("span", { class: "pill" }, "✅ Vero") : h("span", { class: "pill red" }, "❌ Falso")));

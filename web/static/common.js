@@ -99,3 +99,28 @@ function letItSnow(count = 40) {
 }
 
 document.addEventListener("DOMContentLoaded", () => letItSnow());
+
+// Testo di un indizio. Senza frase: "Chi fa il regalo a X ha Altezza: Alto/a".
+// Con la frase: sì/no -> "Chi fa il regalo a X non è fidanzato/a";
+//               più valori -> frase + valore, "Chi fa il regalo a X è Alto/a".
+function isYesNo(options) {
+  return options.map(o => String(o).trim().toLowerCase().replace("ì", "i")).sort().join("|") === "no|si";
+}
+function phraseText(phrase, value, yesNo) {
+  if (!yesNo) return `${phrase} ${value}`;
+  const yes = ["si", "sì"].includes(String(value).trim().toLowerCase());
+  return (yes ? "" : "non ") + phrase;
+}
+function hintNodes(x) {
+  let chip;
+  if (x.phrase) {
+    chip = h("span", { class: "chip" }, phraseText(x.phrase, x.value, x.yes_no));
+    return x.kind === "santa_of"
+      ? ["Chi fa il regalo a ", h("b", {}, x.subject), " ", chip]
+      : [h("b", {}, x.subject), " fa il regalo a qualcuno che ", chip];
+  }
+  chip = h("span", { class: "chip" }, `${x.trait}: ${x.value}`);
+  return x.kind === "santa_of"
+    ? ["Chi fa il regalo a ", h("b", {}, x.subject), " ha ", chip]
+    : [h("b", {}, x.subject), " fa il regalo a qualcuno con ", chip];
+}

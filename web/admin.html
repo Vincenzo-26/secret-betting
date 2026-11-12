@@ -306,7 +306,24 @@
           h("b", {}, t.name),
           t.derived ? h("span", { class: "pill gold", title: "Calcolata dalla data di nascita" }, "📅 automatica") : null,
           h("span", { class: "small muted" }, t.options.join(" · ")),
+          h("span", { class: "small", title: "Come appare negli indizi" },
+            t.phrase ? "💬 " + (isYesNo(t.options) ? [t.options.find(o => !/^no$/i.test(o.trim())), "No"] : t.options)
+                .map(v => `«${phraseText(t.phrase, v, isYesNo(t.options))}»`).join(" / ")
+              : h("span", { class: "muted" }, "💬 nessuna frase")),
           h("span", { class: "spacer" }),
+          !t.derived ? h("button", { class: "btn small", title: "Frase usata negli indizi", onclick: () => {
+            const phrase = prompt(isYesNo(t.options)
+              ? `Frase per «${t.name}», scritta al positivo (il «non» lo aggiunge l'app).\n` +
+                "Es. «è fidanzato/a» diventa:\n" +
+                "  Chi fa il regalo a Marco è fidanzato/a\n" +
+                "  Marco fa il regalo a qualcuno che non è fidanzato/a\n" +
+                "Lascia vuoto per usare il formato normale."
+              : `Parole da mettere prima del valore di «${t.name}».\n` +
+                `Es. «è» diventa: Chi fa il regalo a Marco è ${t.options[0]}\n` +
+                `                 Marco fa il regalo a qualcuno che è ${t.options[0]}\n` +
+                "Lascia vuoto per usare il formato normale.", t.phrase || "");
+            if (phrase !== null) act("PUT", `/api/admin/traits/${t.id}/phrase`, { phrase }, "Frase salvata");
+          } }, "💬 Frase") : null,
           setup && !t.derived ? h("button", { class: "btn small gold", onclick: () => {
             const name = prompt("Nome della caratteristica:", t.name);
             if (name === null) return;

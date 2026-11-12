@@ -266,6 +266,11 @@ def validate_guesses(player_id, my_receiver_id, participant_ids, guesses):
     return clean
 
 
+def is_yes_no(options):
+    """Caratteristica con valori Sì / No (in qualsiasi ordine, con o senza accento)."""
+    return sorted(o.strip().lower().replace("ì", "i") for o in options) == ["no", "si"]
+
+
 # ---------------------------------------------------------------- punteggi
 
 def compute_scores(players, assignments, guesses_by_player, revealed_givers=None, bonus_points=2,
