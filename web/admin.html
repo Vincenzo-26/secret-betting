@@ -229,12 +229,12 @@
       } else {
         const total = n;
         add(box, 
-          h("p", {}, `Coppie svelate: ${st.reveal_step} / ${total}`),
+          h("p", {}, `${stageLabel(st.reveal_step, total)} · coppie svelate: ${Math.min(st.reveal_step, total)} / ${total}`),
           h("div", { class: "row" },
             h("button", { class: "btn ghost small", style: "color:var(--ink)", disabled: st.reveal_step === 0,
               onclick: () => act("POST", "/api/admin/reveal", { action: "prev" }) }, "⏮ Indietro"),
-            h("button", { class: "btn red", disabled: st.reveal_step >= total,
-              onclick: () => act("POST", "/api/admin/reveal", { action: "next" }) }, "🎁 Svela prossima coppia"),
+            h("button", { class: "btn red", disabled: st.reveal_step >= total + SHOW_EXTRA,
+              onclick: () => act("POST", "/api/admin/reveal", { action: "next" }) }, nextLabel(st.reveal_step, total)),
             h("button", { class: "btn ghost small", style: "color:var(--ink)", disabled: st.reveal_step >= total,
               onclick: () => { if (confirm("Svelare tutte le coppie rimanenti?")) act("POST", "/api/admin/reveal", { action: "all" }); } }, "⏭ Svela tutto"),
             st.reveal_step === 0 ? h("button", { class: "btn ghost small", style: "color:var(--ink)",

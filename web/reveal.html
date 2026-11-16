@@ -105,13 +105,42 @@
         return;
       }
 
-      $("#sub").textContent = r.complete ? "🏆 Classifica finale" : `Coppia ${r.step} di ${r.total}`;
+      $("#sub").textContent = {
+        pairs: `Coppia ${r.step} di ${r.total}`, podium: "🏆 Classifica finale",
+        voting: "🗳️ Votazione dei regali", voting_closed: "🗳️ Votazione dei regali",
+        worst: "🎁 Premiazione dei regali", best: "🎁 Premiazione dei regali",
+      }[r.stage] || "";
       const stage = h("div", { class: "stage" });
 
       // ---------- coppie
       const left = h("section", { class: "card" });
       const last = r.pairs[r.pairs.length - 1];
-      if (r.complete && r.leaderboard.length) {
+      if (r.stage === "voting" || r.stage === "voting_closed") {
+        const open = r.stage === "voting";
+        left.append(h("div", { class: "spotlight" },
+          h("div", { class: "gift" }, h("div", { class: "box" }, open ? "🗳️" : "🔒")),
+          h("h2", { style: "justify-content:center" }, open ? "Votate dal telefono!" : "Votazione chiusa"),
+          h("p", {}, open ? "Il regalo più bello 🎁 e quello più brutto 💩 · voto anonimo"
+                          : "E il regalo peggiore della serata è…"),
+          h("div", { class: "vote-count" }, `${r.voters} / ${r.players}`),
+          h("div", { class: "progress", style: "max-width:360px;margin:0 auto" },
+            h("div", { style: `width:${r.players ? 100 * r.voters / r.players : 0}%` })),
+          h("p", { class: "small muted" }, open ? "hanno votato" : "voti raccolti")));
+      } else if (r.stage === "worst" || r.stage === "best") {
+        const award = (list, title, icon) => h("div", { class: "award" },
+          h("div", { class: "award-title" }, `${icon} ${title}`),
+          !list.length ? h("p", { class: "muted" }, "Nessun voto 🤷") :
+            h("div", {}, ...list.map(x => h("div", { class: "award-item" },
+              h("div", { class: "award-who" }, "Il regalo di ", h("b", {}, x.giver), " a ", x.receiver),
+              h("div", { class: "small muted" }, x.votes === 1 ? "con 1 voto" : `con ${x.votes} voti`),
+              h("div", { class: "award-line" }, `«${x.line}»`)))));
+        if (r.stage === "worst") {
+          left.append(h("div", { class: "spotlight" }, award(r.worst, "Il regalo peggiore", "💩")));
+        } else {
+          left.append(h("div", { class: "spotlight" }, award(r.best, "Il regalo migliore", "🎁")),
+            h("p", { class: "small muted center" }, "💩 Peggiore: " + (r.worst.map(x => x.giver).join(", ") || "nessun voto")));
+        }
+      } else if (r.stage === "podium" && r.leaderboard.length) {
         const winners = r.leaderboard.filter(x => x.rank === 1).map(x => x.name);
         left.append(h("div", { class: "spotlight" },
           h("div", { class: "winner late" }, winners.length > 1 ? `Pari merito: ${winners.join(", ")}!` : `Vince ${winners[0]}!`),

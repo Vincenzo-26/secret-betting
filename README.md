@@ -24,6 +24,19 @@ e si stila la classifica.
 - **Spareggio:** a pari punti è più in alto chi ha salvato i pronostici prima. Conta l'ultimo
   salvataggio, quindi ogni modifica aggiorna l'orario.
 
+## Lo show (tutto dal telecomando)
+
+Ogni passo parte solo quando l'admin preme "avanti" dal telecomando (o dall'admin / barra spaziatrice):
+1. le coppie, una alla volta;
+2. 🏆 il podio;
+3. 🗳️ la **votazione dei regali**: sul telefono ognuno vota il regalo più bello e il più brutto
+   (anonima, un voto solo, non il proprio regalo); il maxischermo mostra quanti hanno votato;
+4. 🔒 chiusura della votazione;
+5. 💩 il regalo peggiore e poi 🎁 il migliore, con una frase goliardica a caso (pari merito: tutti).
+
+Il server salva solo i totali per regalo e, separatamente, chi ha già votato: nessuno (admin
+compreso) può sapere chi ha votato cosa.
+
 ## Indizi
 
 - L'admin definisce 5-6 **caratteristiche** uguali per tutti, ognuna con almeno 2 valori
@@ -94,7 +107,7 @@ Scorciatoie (doppio clic):
 | `apri_admin.bat` | accende il server (se spento) e apre l'admin |
 | `apri_profilo.bat` | accende il server e apre il proprio profilo (nome in cima al file) |
 | `prova_estrazione.bat` | estrazione di prova su una **copia** del database (porta 5056) e apre il profilo |
-| `prova_rivelazione.bat` | come sopra + pronostici casuali per tutti; apre `/reveal` sul PC con il QR del telecomando da inquadrare col cellulare (stessa wifi) |
+| `prova_rivelazione.bat` | come sopra + pronostici casuali per tutti; alla votazione dei regali gli altri votano da soli (tu voti dal tuo profilo); apre `/reveal` sul PC con il QR del telecomando da inquadrare col cellulare (stessa wifi) |
 
 Le prove non toccano mai `instance/secret_santa.db`.
 

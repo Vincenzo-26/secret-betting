@@ -11,6 +11,7 @@ Estrazione (default):
 
 Rivelazione (--rivelazione): come sopra, in più
   - pronostici casuali per tutti i giocatori (così la classifica si muove);
+  - alla votazione dei regali gli altri giocatori votano da soli, a caso (tu voti dal tuo profilo);
   - il server è raggiungibile dagli altri dispositivi della stessa wifi;
   - apre /reveal sul PC e stampa l'indirizzo del telecomando per il cellulare.
 
@@ -59,6 +60,33 @@ def random_guesses(db, assignments, ids, p, accuracy):
         return
     db.executemany("INSERT INTO guesses(player_id, giver_id, receiver_id) VALUES (?, ?, ?)",
                    [(p, g, r) for g, r in guess.items()])
+
+
+def fake_voters(my_id):
+    """Solo nella prova: quando si apre la votazione dei regali, gli altri giocatori
+    votano a caso uno alla volta (tu voti dal tuo profilo). Nessun voto viene stampato."""
+    while True:
+        time.sleep(2)
+        try:
+            db = sqlite3.connect(PROVA_DIR / "secret_santa.db")
+            s = dict(db.execute("SELECT key, value FROM settings"))
+            amap = dict(db.execute("SELECT giver_id, receiver_id FROM assignments"))
+            if s.get("phase") != "reveal" or int(s.get("reveal_step", 0)) != len(amap) + 2:
+                db.close()
+                continue
+            voted = {r[0] for r in db.execute("SELECT voter_id FROM gift_voters")}
+            todo = [p for p in amap if p != my_id and p not in voted]
+            if todo:
+                p = random.choice(todo)
+                best, worst = random.sample([g for g in amap if g != p], 2)
+                db.execute("INSERT INTO gift_voters(voter_id) VALUES (?)", (p,))
+                for giver, kind in ((best, "best"), (worst, "worst")):
+                    db.execute("INSERT INTO gift_votes(giver_id, kind, votes) VALUES (?, ?, 1) "
+                               "ON CONFLICT(giver_id, kind) DO UPDATE SET votes = votes + 1", (giver, kind))
+                db.commit()
+            db.close()
+        except sqlite3.Error:
+            pass
 
 
 if not REAL_DB.exists():
@@ -112,7 +140,7 @@ admin.post("/api/admin/logout", json={})
 print("Estrazione di prova fatta (solo sulla copia).")
 
 db = sqlite3.connect(PROVA_DIR / "secret_santa.db")
-row = db.execute("SELECT code FROM participants WHERE name = ? COLLATE NOCASE", (NOME,)).fetchone()
+row = db.execute("SELECT code, id FROM participants WHERE name = ? COLLATE NOCASE", (NOME,)).fetchone()
 
 if REVEAL_MODE:
     assignments = dict(db.execute("SELECT giver_id, receiver_id FROM assignments").fetchall())
@@ -144,6 +172,12 @@ if REVEAL_MODE:
     print("Se Windows chiede di consentire Python sulla rete, consenti solo le reti PRIVATE.")
     print("Puoi anche usare la tastiera sul PC (spazio = avanti, freccia sinistra = indietro)")
     print(f"dopo aver fatto login admin su http://localhost:{PORT}/admin nello stesso browser.")
+    if row:
+        print()
+        print("VOTAZIONE DEI REGALI (dopo il podio): gli altri giocatori votano da soli, a caso;")
+        print("il tuo voto lo dai dal tuo profilo di prova (entra con il tuo PIN):")
+        print(f"     http://{ip or 'localhost'}:{PORT}/p/{row[0]}")
+    threading.Thread(target=fake_voters, args=(row[1] if row else None,), daemon=True).start()
 else:
     open_url = f"http://localhost:{PORT}/" + (f"p/{row[0]}" if row else "")
     if not row:

@@ -73,16 +73,21 @@
             onclick: () => send("start", "Iniziare la rivelazione? I pronostici verranno chiusi.") }, "✨ Inizia la rivelazione"));
         return;
       }
-      const done = r.step >= r.total;
-      pad.append(
-        h("div", { class: "remote-count" }, done ? "🏆 Classifica finale" : r.step === 0 ? "Pronti, si parte!" : `Coppia ${r.step} di ${r.total}`),
-        h("div", { class: "progress" }, h("div", { style: `width:${r.total ? 100 * r.step / r.total : 0}%` })),
-        h("button", { class: "btn red block remote-big", type: "button", disabled: done, onclick: () => send("next") },
-          done ? "Tutto svelato 🎉" : r.step + 1 === r.total ? "🏆 Svela l'ultima coppia" : "▶ Svela la prossima"),
+      const last = r.total + SHOW_EXTRA;
+      const done = r.step >= last;
+      const pairsDone = r.step >= r.total;
+      add(pad,
+        h("div", { class: "remote-count" }, stageLabel(r.step, r.total)),
+        h("div", { class: "progress" }, h("div", { style: `width:${last ? 100 * r.step / last : 0}%` })),
+        r.stage === "voting" ? h("p", { style: "font-weight:800" }, `🗳️ Hanno votato ${r.voters} su ${r.players}`) : null,
+        h("button", { class: "btn red block remote-big", type: "button", disabled: done,
+          onclick: () => send("next", r.stage === "voting" && r.voters < r.players
+            ? `Hanno votato ${r.voters} su ${r.players}. Chiudere comunque la votazione?` : null) },
+          nextLabel(r.step, r.total)),
         h("div", { class: "row", style: "margin-top:12px" },
           h("button", { class: "btn ghost", type: "button", style: "flex:1", disabled: r.step === 0, onclick: () => send("prev") }, "◀ Indietro"),
-          h("button", { class: "btn gold", type: "button", style: "flex:1", disabled: done,
-            onclick: () => send("all", "Svelare subito tutte le coppie rimaste?") }, "⏩ Mostra tutto")));
+          pairsDone ? null : h("button", { class: "btn gold", type: "button", style: "flex:1",
+            onclick: () => send("all", "Svelare subito tutte le coppie rimaste?") }, "⏩ Tutte le coppie")));
       if (r.step === 0) {
         pad.append(h("button", { class: "btn ghost small", type: "button", style: "margin-top:16px",
           onclick: () => send("stop") }, "↩ Annulla l'inizio"));

@@ -138,6 +138,16 @@ CREATE TABLE IF NOT EXISTS trait_values (
     PRIMARY KEY (participant_id, trait_id)
 );
 -- Indizi generati all'estrazione (2 a testa: uno vero, uno falso)
+-- Votazione dei regali, ANONIMA: si salvano solo i totali per regalo e, a parte, chi ha già votato.
+CREATE TABLE IF NOT EXISTS gift_votes (
+    giver_id INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,   -- il regalo di chi
+    kind     TEXT NOT NULL,                                                     -- best | worst
+    votes    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (giver_id, kind)
+);
+CREATE TABLE IF NOT EXISTS gift_voters (
+    voter_id INTEGER PRIMARY KEY REFERENCES participants(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS hints (
     player_id  INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
     slot       INTEGER NOT NULL,
@@ -305,6 +315,79 @@ def reveal_complete(s=None):
         return False
     total = get_db().execute("SELECT COUNT(*) FROM assignments").fetchone()[0]
     return int(s["reveal_step"]) >= total
+
+
+# Dopo l'ultima coppia lo show continua, sempre un passo alla volta dal telecomando:
+# reveal_step = total -> ultima coppia; total+1 -> podio; +2 votazione aperta; +3 votazione chiusa;
+# +4 regalo peggiore; +5 regalo migliore.
+SHOW_STAGES = ["podium", "voting", "voting_closed", "worst", "best"]
+
+
+def show_stage(step, total):
+    """Nome del passo dello show ("pairs" finché si svelano le coppie, ultima compresa)."""
+    if step <= total:
+        return "pairs"
+    return SHOW_STAGES[min(step - total, len(SHOW_STAGES)) - 1]
+
+
+def current_stage(s=None):
+    s = s or get_settings()
+    if s["phase"] != "reveal":
+        return None
+    total = get_db().execute("SELECT COUNT(*) FROM assignments").fetchone()[0]
+    return show_stage(int(s["reveal_step"]), total)
+
+
+# Frasi per il maxischermo. La prima di ogni lista è la frase "firma" e compare sempre;
+# a pari merito gli altri vincitori ricevono una delle restanti, diverse tra loro e scelte a caso.
+WORST_LINES = [
+    "Che merda, lascia il dottorato.",
+    "Fai schifo, cambia vita.",
+    "Le renne hanno chiesto il trasferimento.",
+    "Anche il riciclo ha una dignità. Tu no.",
+    "Babbo Natale ti ha tolto il saluto.",
+    "Complimenti: hai deluso tutti contemporaneamente.",
+    "Questo regalo è la prova che il Grinch esiste.",
+    "L'anno prossimo regala un buono: almeno sbagliamo noi.",
+    "Hai impiegato più tempo a incartarlo che a sceglierlo. E si vede.",
+    "Lo scontrino non serve: nessuno lo vorrebbe nemmeno cambiare.",
+    "Ritenta, sarai più fortunato. Anzi no: smetti.",
+    "Gli elfi si sono licenziati per protesta.",
+]
+BEST_LINES = [
+    "Elfo dell'anno, senza discussioni.",
+    "Babbo Natale ti ha chiesto ripetizioni.",
+    "Applausi. Anche dalle renne.",
+    "Sei ufficialmente il preferito di Babbo Natale.",
+]
+
+
+def award_lines(lines, giver_ids, kind):
+    """{giver_id: frase}. La frase "firma" (la prima) esce sempre: con un vincitore va a lui,
+    a pari merito a uno di loro a caso; gli altri ricevono frasi diverse prese a caso dalle restanti."""
+    import random as _random
+    ids = sorted(giver_ids)
+    rng = _random.Random(f"{kind}-{ids}")      # stabile: non cambia a ogni aggiornamento dello schermo
+    rng.shuffle(ids)
+    others = lines[1:]
+    rng.shuffle(others)
+    out = {ids[0]: lines[0]}
+    for i, gid in enumerate(ids[1:]):
+        out[gid] = others[i % len(others)]
+    return out
+
+
+def vote_winners(kind, names, amap):
+    """Regali con più voti (tutti i pari merito)."""
+    rows = get_db().execute("SELECT giver_id, votes FROM gift_votes WHERE kind = ? AND votes > 0", (kind,)).fetchall()
+    if not rows:
+        return []
+    top = max(r["votes"] for r in rows)
+    winners = [r["giver_id"] for r in rows if r["votes"] == top]
+    lines = award_lines(WORST_LINES if kind == "worst" else BEST_LINES, winners, kind)
+    out = [{"giver": names[g], "receiver": names.get(amap.get(g), "?"), "votes": top, "line": lines[g]}
+           for g in winners]
+    return sorted(out, key=lambda x: x["giver"].lower())
 
 
 def _epoch_or_none(value):
@@ -565,9 +648,56 @@ def me():
         hints=player_hints(me_row["id"], s, names),
         has_traits=bool(traits_list()),
         # Vincoli (es. coppie dell'anno scorso): nei pronostici quei nomi non si possono scegliere.
+        vote=_vote_state(me_row["id"], s, names),
         exclusions=[[r["giver_id"], r["receiver_id"]] for r in
                     db.execute("SELECT giver_id, receiver_id FROM exclusions ORDER BY giver_id, receiver_id")],
     )
+
+
+def _vote_state(player_id, s, names):
+    """Votazione dei regali per la pagina personale (None se non è il momento)."""
+    stage = current_stage(s)
+    if stage not in ("voting", "voting_closed", "worst", "best"):
+        return None
+    voted = get_db().execute("SELECT 1 FROM gift_voters WHERE voter_id = ?", (player_id,)).fetchone() is not None
+    out = {"open": stage == "voting", "voted": voted}
+    if stage == "voting" and not voted:
+        # Tutti i regali tranne quello che ho fatto io.
+        out["gifts"] = sorted(
+            ({"giver_id": gid, "giver": names[gid], "receiver": names[rid]}
+             for gid, rid in assignments_map().items() if gid != player_id),
+            key=lambda x: x["giver"].lower())
+    return out
+
+
+@app.post("/api/me/vote")
+@player_required
+def vote_gifts():
+    if current_stage() != "voting":
+        return fail("La votazione non è aperta.", 403)
+    me_id = g.player["id"]
+    db = get_db()
+    data = body()
+    try:
+        best, worst = int(data.get("best")), int(data.get("worst"))
+    except (TypeError, ValueError):
+        return fail("Scegli sia il regalo più bello sia il più brutto.")
+    givers = set(assignments_map())
+    if best not in givers or worst not in givers:
+        return fail("Regalo sconosciuto.")
+    if me_id in (best, worst):
+        return fail("Il tuo regalo non lo puoi votare.")
+    if best == worst:
+        return fail("Lo stesso regalo non può essere sia il più bello sia il più brutto.")
+    try:
+        db.execute("INSERT INTO gift_voters(voter_id) VALUES (?)", (me_id,))
+    except sqlite3.IntegrityError:
+        return fail("Hai già votato.", 409)
+    for giver, kind in ((best, "best"), (worst, "worst")):
+        db.execute("INSERT INTO gift_votes(giver_id, kind, votes) VALUES (?, ?, 1) "
+                   "ON CONFLICT(giver_id, kind) DO UPDATE SET votes = votes + 1", (giver, kind))
+    db.commit()
+    return ok()
 
 
 def _hint_payload(row, names, show_truth):
@@ -1059,6 +1189,8 @@ def do_draw():
     db.execute("DELETE FROM assignments")
     db.execute("DELETE FROM guesses")
     db.execute("DELETE FROM hints")
+    db.execute("DELETE FROM gift_votes")
+    db.execute("DELETE FROM gift_voters")
     db.executemany(
         "INSERT INTO assignments(giver_id, receiver_id, reveal_order) VALUES (?, ?, ?)",
         [(gid, rid, order[gid]) for gid, rid in result.items()],
@@ -1126,7 +1258,8 @@ def reveal_control():
         set_setting("phase", "playing")
     elif action in ("next", "prev", "all"):
         require_phase("reveal")
-        step = {"next": min(step + 1, total), "prev": max(step - 1, 0), "all": total}[action]
+        last = total + len(SHOW_STAGES)
+        step = {"next": min(step + 1, last), "prev": max(step - 1, 0), "all": max(step, total)}[action]
         set_setting("reveal_step", step)
     else:
         return fail("Azione sconosciuta.")
@@ -1149,6 +1282,8 @@ def remote_state():
         submitted=db.execute(
             "SELECT COUNT(*) FROM participants WHERE guesses_updated_at IS NOT NULL").fetchone()[0],
         guesses_open=guesses_open(s),
+        stage=current_stage(s),
+        voters=db.execute("SELECT COUNT(*) FROM gift_voters").fetchone()[0],
     )
 
 
@@ -1243,9 +1378,18 @@ def reveal_state():
             for r in rows
         ]
         all_hints.sort(key=lambda x: (x["player"].lower(), x["slot"]))
+    stage = show_stage(step, total)
+    if stage != "pairs":
+        data["voters"] = db.execute("SELECT COUNT(*) FROM gift_voters").fetchone()[0]
+    if stage in ("worst", "best"):
+        amap = assignments_map()
+        data["worst"] = vote_winners("worst", names, amap)
+        if stage == "best":
+            data["best"] = vote_winners("best", names, amap)
     data.update(
-        step=step,
+        step=min(step, total),
         total=total,
+        stage=stage,
         complete=step >= total,
         hints=all_hints,
         pairs=pairs,

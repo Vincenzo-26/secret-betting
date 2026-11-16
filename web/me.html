@@ -166,6 +166,9 @@
       const timers = renderTimers();
       if (timers) app.append(timers);
 
+      // ---- Votazione dei regali (a fine show, la apre l'admin dal telecomando)
+      if (data.vote) app.append(renderVote());
+
       // ---- Risultati personali
       if (results) {
         app.append(h("section", { class: "card center" },
@@ -354,6 +357,45 @@
     }
 
     // A rivelazione completa: i pronostici degli altri, una persona alla volta.
+    // Votazione anonima dei regali. Le scelte restano anche se la pagina si aggiorna da sola.
+    const voteDraft = { best: "", worst: "" };
+    let voteBusy = false;
+    function renderVote() {
+      const v = data.vote;
+      const card = h("section", { class: "card center" }, h("h2", { style: "justify-content:center" }, "🗳️ Vota i regali"));
+      if (v.voted) {
+        card.append(h("p", {}, "✅ Hai votato! Il voto è anonimo: guarda il maxischermo 📺"));
+        return card;
+      }
+      if (!v.open) {
+        card.append(h("p", { class: "muted" }, "🔒 La votazione è chiusa."));
+        return card;
+      }
+      card.append(h("p", { class: "small muted" }, "Voto anonimo, uno solo e non si può cambiare. Il tuo regalo non è in lista."));
+      const pick = (key, label) => {
+        const sel = h("select", { "aria-label": label },
+          h("option", { value: "" }, "— scegli un regalo —"),
+          ...v.gifts.map(x => h("option", { value: x.giver_id }, `il regalo di ${x.giver} a ${x.receiver}`)));
+        sel.value = voteDraft[key];
+        sel.addEventListener("change", () => { voteDraft[key] = sel.value; });
+        return h("div", { style: "text-align:left;margin-top:12px" }, h("label", {}, label), sel);
+      };
+      const btn = h("button", { class: "btn red block", type: "button", style: "margin-top:16px", onclick: async () => {
+        if (!voteDraft.best || !voteDraft.worst) return toast("Scegli sia il più bello sia il più brutto");
+        if (voteDraft.best === voteDraft.worst) return toast("Devono essere due regali diversi");
+        if (!confirm("Confermi il voto? Non si potrà cambiare.") || voteBusy) return;
+        voteBusy = true;
+        try {
+          await api("POST", "/api/me/vote", { best: Number(voteDraft.best), worst: Number(voteDraft.worst) });
+          toast("Voto inviato! 🗳️", "success");
+          await load();
+        } catch (ex) { toast(ex.message); }
+        voteBusy = false;
+      } }, "🗳️ Invia il voto");
+      card.append(pick("best", "🎁 Il regalo più bello"), pick("worst", "💩 Il regalo più brutto"), btn);
+      return card;
+    }
+
     let othersPick = "";
     function renderOthers() {
       const { results, me } = data;
@@ -434,7 +476,12 @@
     load();
     setInterval(() => tickTimers(), 1000);
     // Durante la rivelazione aggiorna i risultati in automatico.
-    setInterval(() => { if (data && data.game.phase === "reveal") load(); }, 5000);
+    // Durante lo show si aggiorna da sola (ma non mentre si sta scegliendo nel menu del voto).
+    setInterval(() => {
+      if (!data || data.game.phase !== "reveal" || voteBusy) return;
+      if (document.activeElement && document.activeElement.tagName === "SELECT") return;
+      load();
+    }, 5000);
     // Quando scocca l'ora di un indizio, ricarica per mostrarlo (senza perdere le modifiche non salvate).
     setInterval(() => {
       if (!data || !data.hints) return;

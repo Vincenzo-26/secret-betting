@@ -304,3 +304,12 @@ th { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: 
 .guessed-by { margin-top: 10px; }
 .guessed-by .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 6px; }
 .guess-truth { text-align: right; margin: -4px 0 6px; }
+
+/* ---------- votazione dei regali (maxischermo) */
+.vote-count { font-family: "Mountains of Christmas", Georgia, serif; font-size: 4rem; color: var(--berry); line-height: 1.1; margin: 10px 0; }
+.award-title { font-weight: 900; font-size: 1.6rem; margin-bottom: 12px; }
+.award-item { margin: 14px 0; animation: pop .6s ease-out both; }
+.award-who { font-size: 1.5rem; }
+.award-who b { font-size: 2rem; color: var(--berry); }
+.award-line { font-family: "Mountains of Christmas", Georgia, serif; font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  color: var(--pine); margin-top: 8px; opacity: 0; animation: pop .7s ease-out .9s forwards; }

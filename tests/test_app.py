@@ -325,6 +325,72 @@ class ApiTests(unittest.TestCase):
         ok_target = next(i for n, i in ids.items() if n not in ("Bruno", "Carla") and i != mine)
         self.assertEqual(anna.put("/api/me/guesses", json={"guesses": {str(ids["Bruno"]): ok_target}}).status_code, 200)
 
+    def test_show_stages_and_gift_votes(self):
+        names = ["Anna", "Bruno", "Carla", "Dario", "Elena"]
+        people = self.add_people(names)
+        self.admin.post("/api/admin/draw", json={})
+        cl = {n: self.login(people[n]["code"]) for n in names}
+        ids = {n: people[n]["id"] for n in names}
+        nxt = lambda: self.admin.post("/api/admin/reveal", json={"action": "next"})
+        pub = lambda: self.app.test_client().get("/api/reveal").get_json()
+        self.admin.post("/api/admin/reveal", json={"action": "start"})
+        self.admin.post("/api/admin/reveal", json={"action": "all"})
+        self.assertEqual((pub()["stage"], pub()["step"]), ("pairs", 5))        # ultima coppia, niente podio
+        self.assertIsNone(cl["Anna"].get("/api/me").get_json()["vote"])
+        self.assertEqual(cl["Anna"].post("/api/me/vote", json={"best": ids["Bruno"], "worst": ids["Carla"]}).status_code, 403)
+        nxt()
+        self.assertEqual(pub()["stage"], "podium")
+        nxt()
+        self.assertEqual(pub()["stage"], "voting")
+        v = cl["Anna"].get("/api/me").get_json()["vote"]
+        self.assertTrue(v["open"]) ; self.assertFalse(v["voted"])
+        self.assertEqual({x["giver"] for x in v["gifts"]}, set(names) - {"Anna"})   # il proprio regalo non c'è
+        vote = lambda n, b, w: cl[n].post("/api/me/vote", json={"best": ids[b], "worst": ids[w]})
+        self.assertEqual(vote("Anna", "Anna", "Bruno").status_code, 400)
+        self.assertEqual(vote("Anna", "Bruno", "Bruno").status_code, 400)
+        self.assertEqual(vote("Anna", "Bruno", "Carla").status_code, 200)
+        self.assertEqual(vote("Anna", "Dario", "Carla").status_code, 409)           # un voto solo
+        self.assertEqual(vote("Bruno", "Dario", "Carla").status_code, 200)
+        self.assertEqual(vote("Carla", "Bruno", "Elena").status_code, 200)
+        self.assertTrue(cl["Anna"].get("/api/me").get_json()["vote"]["voted"])
+        self.assertEqual(self.admin.get("/api/admin/remote").get_json()["voters"], 3)
+        self.assertNotIn("worst", pub())
+        nxt()   # votazione chiusa
+        self.assertEqual(vote("Dario", "Bruno", "Carla").status_code, 403)
+        self.assertNotIn("worst", pub())
+        nxt()
+        r = pub()
+        self.assertEqual(r["stage"], "worst")
+        self.assertEqual([(x["giver"], x["votes"]) for x in r["worst"]], [("Carla", 2)])
+        self.assertEqual(r["worst"][0]["line"], "Che merda, lascia il dottorato.")      # vincitore unico
+        self.assertNotIn("best", r)
+        nxt()
+        r = pub()
+        self.assertEqual(r["stage"], "best")
+        self.assertEqual([(x["giver"], x["votes"]) for x in r["best"]], [("Bruno", 2)])
+        self.assertEqual(r["best"][0]["line"], "Elfo dell'anno, senza discussioni.")
+        # Pari merito: la frase "firma" c'è sempre (a uno di loro), le altre sono diverse tra loro
+        lines = self.mod.award_lines(self.mod.WORST_LINES, [3, 7, 9], "worst")
+        self.assertEqual(len(set(lines.values())), 3)
+        self.assertEqual(list(lines.values()).count(self.mod.WORST_LINES[0]), 1)
+        self.assertEqual(lines, self.mod.award_lines(self.mod.WORST_LINES, [9, 7, 3], "worst"))   # stabili
+        nxt()
+        self.assertEqual(pub()["stage"], "best")                                       # ultimo passo
+        # Anonimato: da nessuna parte compare chi ha votato cosa
+        blob = str(r) + str(self.admin.get("/api/admin/state").get_json())
+        self.assertNotIn("voter_id", blob)
+        self.assertNotIn("voted_by", blob)
+        # Pareggio: tutti i pari merito
+        self.admin.post("/api/admin/reveal", json={"action": "prev"})
+        self.admin.post("/api/admin/reveal", json={"action": "prev"})
+        self.admin.post("/api/admin/reveal", json={"action": "prev"})                  # votazione riaperta
+        self.assertEqual(vote("Dario", "Carla", "Bruno").status_code, 200)
+        nxt(); nxt()
+        self.assertEqual([x["giver"] for x in pub()["worst"]], ["Carla"])
+        nxt()
+        self.assertEqual([x["giver"] for x in pub()["best"]], ["Bruno"])
+        self.assertEqual(vote("Elena", "Carla", "Dario").status_code, 403)
+
     def test_event_date_setting(self):
         people = self.add_people(["Anna", "Bruno", "Carla"])
         anna = self.login(people["Anna"]["code"])

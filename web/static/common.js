@@ -124,3 +124,21 @@ function hintNodes(x) {
     ? ["Chi fa il regalo a ", h("b", {}, x.subject), " ha ", chip]
     : [h("b", {}, x.subject), " fa il regalo a qualcuno con ", chip];
 }
+
+// Show della serata: dopo le coppie ci sono 5 passi extra (podio, votazione, chiusura, peggiore, migliore).
+const SHOW_EXTRA = 5;
+// Testo del pulsante "avanti" in base al passo attuale (step = passi fatti, total = coppie).
+function nextLabel(step, total) {
+  const last = total + SHOW_EXTRA;
+  if (step >= last) return "Fine dello show 🎉";
+  if (step < total - 1) return "▶ Svela la prossima coppia";
+  if (step === total - 1) return "🎁 Svela l'ultima coppia";
+  return ["🏆 Mostra il podio", "🗳️ Apri la votazione dei regali", "🔒 Chiudi la votazione",
+          "💩 Svela il regalo peggiore", "🎁 Svela il regalo migliore"][step - total];
+}
+// Dove siamo, per il telecomando e l'admin.
+function stageLabel(step, total) {
+  if (step === 0) return "Pronti, si parte!";
+  if (step <= total) return `Coppia ${step} di ${total}`;
+  return ["🏆 Podio", "🗳️ Votazione aperta", "🔒 Votazione chiusa", "💩 Regalo peggiore", "🎁 Regalo migliore"][Math.min(step - total, SHOW_EXTRA) - 1];
+}
