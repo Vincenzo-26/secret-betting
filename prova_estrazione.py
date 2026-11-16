@@ -100,7 +100,9 @@ if state["game"]["phase"] != "setup":
 now = time.time()
 settings = {"hint1_at": now - 60, "hint2_at": now + 7 * 86400}
 if not state["game"]["event_at"] or state["game"]["event_at"] <= settings["hint2_at"]:
-    settings["event_at"] = now + 30 * 86400      # serata (= chiusura pronostici) dopo gli indizi
+    settings["event_at"] = now + 30 * 86400      # serata dopo gli indizi
+if state["game"]["deadline_custom"] and state["game"]["deadline_custom"] <= settings["hint2_at"]:
+    settings["deadline"] = now + 29 * 86400      # chiusura pronostici dopo gli indizi e prima della serata
 admin.put("/api/admin/settings", json=settings)
 
 r = admin.post("/api/admin/draw", json={})

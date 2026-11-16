@@ -175,7 +175,7 @@ class ApiTests(unittest.TestCase):
                          "DELETE FROM assignments; DELETE FROM exclusions; DELETE FROM participants;")
         db.execute("UPDATE settings SET value='setup' WHERE key='phase'")
         db.execute("UPDATE settings SET value='0' WHERE key IN ('guesses_closed','reveal_step')")
-        db.execute("UPDATE settings SET value='' WHERE key IN ('hint1_at','hint2_at','event_at','extra_timer_at')")
+        db.execute("UPDATE settings SET value='' WHERE key IN ('deadline','hint1_at','hint2_at','event_at','extra_timer_at')")
         db.commit()
         db.close()
         self.admin = self.app.test_client()
@@ -258,6 +258,26 @@ class ApiTests(unittest.TestCase):
         r = self.admin.put("/api/admin/settings", json={"hint2_at": ev + 60})
         self.assertEqual(r.status_code, 400)
         self.assertIsNone(self.admin.get("/api/admin/state").get_json()["game"]["hint_dates"][1])
+
+        # Chiusura separata, prima della serata: comanda lei
+        now = time.time()
+        r = self.admin.put("/api/admin/settings", json={"event_at": now + 5 * 86400, "deadline": now + 3600})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        g = anna.get("/api/me").get_json()["game"]
+        self.assertTrue(g["guesses_open"])
+        self.assertAlmostEqual(g["deadline"], now + 3600, delta=1)
+        self.admin.put("/api/admin/settings", json={"deadline": now - 1})
+        self.assertFalse(anna.get("/api/me").get_json()["game"]["guesses_open"])          # serata ancora lontana
+        self.assertEqual(anna.put("/api/me/guesses", json={"guesses": partial}).status_code, 403)
+        # Dopo la serata: rifiutata; indizi dopo la chiusura: rifiutati
+        self.assertEqual(self.admin.put("/api/admin/settings", json={"deadline": now + 6 * 86400}).status_code, 400)
+        self.admin.put("/api/admin/settings", json={"deadline": now + 2 * 86400})
+        self.assertEqual(self.admin.put("/api/admin/settings", json={"hint2_at": now + 3 * 86400}).status_code, 400)
+        # Vuota: si torna alla serata
+        self.admin.put("/api/admin/settings", json={"deadline": ""})
+        g = anna.get("/api/me").get_json()["game"]
+        self.assertEqual(g["deadline"], g["event_at"])
+        self.assertIsNone(g["deadline_custom"])
 
     def test_reveal_top_wrong_guess(self):
         people = self.add_people(["Anna", "Bruno", "Carla", "Dario", "Elena", "Fabio"])

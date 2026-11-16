@@ -17,9 +17,9 @@ e si stila la classifica.
     capito chi gli fa il regalo, e l'errore più comune ("in 5 pensavano che…");
   - a rivelazione completa, nella pagina personale: i propri pronostici con ✅/❌ e la risposta
     giusta, più "👀 I pronostici degli altri", una persona alla volta.
-- I pronostici degli altri restano nascosti fino ad allora; si possono modificare fino all'**inizio della serata**
-  (la data dell'evento è anche la scadenza, così non ci si mette d'accordo parlandone).
-  Gli sblocchi degli indizi devono essere prima della serata.
+- I pronostici degli altri restano nascosti fino ad allora; si possono modificare fino alla
+  **chiusura dei pronostici** impostata dall'admin (se vuota, all'inizio della serata), che non può
+  essere dopo la serata. Gli sblocchi degli indizi devono essere prima della chiusura.
 - Non è obbligatorio pronosticare tutte le coppie: conta solo quello che si indovina.
 - **Spareggio:** a pari punti è più in alto chi ha salvato i pronostici prima. Conta l'ultimo
   salvataggio, quindi ogni modifica aggiorna l'orario.

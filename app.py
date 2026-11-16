@@ -61,6 +61,7 @@ DEFAULT_SETTINGS = {
     "hint1_at": "",          # sblocco indizi 1-2 (epoch) o vuoto
     "hint2_at": "",          # sblocco indizi 3-4 (epoch) o vuoto
     "event_at": "",          # data/ora della serata dello scambio (epoch) o vuoto
+    "deadline": "",          # chiusura pronostici (epoch); vuoto = all'inizio della serata
     "extra_timer_label": "Concepimento figlio Rocco",  # timer extra (goliardico)
     "extra_timer_at": "",
 }
@@ -227,18 +228,26 @@ def guesses_open(s=None):
     s = s or get_settings()
     if s["phase"] != "playing" or s["guesses_closed"] == "1":
         return False
-    # I pronostici si chiudono all'inizio della serata (così non ci si mette d'accordo parlandone).
-    event_at = _epoch_or_none(s["event_at"])
-    if event_at is not None and time.time() >= event_at:
+    # Si chiudono alla scadenza impostata o, se manca, all'inizio della serata
+    # (così non ci si mette d'accordo parlandone).
+    deadline = guesses_deadline(s)
+    if deadline is not None and time.time() >= deadline:
         return False
     return True
+
+
+def guesses_deadline(s):
+    """Chiusura dei pronostici: la data impostata, altrimenti la serata."""
+    own = _epoch_or_none(s.get("deadline", ""))
+    return own if own is not None else _epoch_or_none(s["event_at"])
 
 
 def game_public(s=None):
     s = s or get_settings()
     return {
         "name": s["game_name"],
-        "deadline": _epoch_or_none(s["event_at"]),   # la scadenza dei pronostici è la serata
+        "deadline": guesses_deadline(s),                       # quando si chiudono davvero i pronostici
+        "deadline_custom": _epoch_or_none(s.get("deadline", "")),  # solo quella impostata a mano (per l'admin)
         "phase": s["phase"],
         "guesses_open": guesses_open(s),
         "bonus_points": int(s["bonus_points"]),
@@ -714,7 +723,7 @@ def admin_settings():
         if not name:
             return fail("Il nome del gioco non può essere vuoto.")
         set_setting("game_name", name)
-    for key, label in (("hint1_at", "Data indizi 1-2"), ("hint2_at", "Data indizi 3-4"), ("event_at", "Data dell'evento"), ("extra_timer_at", "Data del timer extra")):
+    for key, label in (("hint1_at", "Data indizi 1-2"), ("hint2_at", "Data indizi 3-4"), ("event_at", "Data dell'evento"), ("deadline", "Chiusura pronostici"), ("extra_timer_at", "Data del timer extra")):
         if key in data:
             value = data[key]
             if value in (None, ""):
@@ -726,11 +735,14 @@ def admin_settings():
                     return fail(f"{label} non valida.")
     s = get_settings()
     ev = _epoch_or_none(s["event_at"])
+    own = _epoch_or_none(s["deadline"])
+    if own is not None and ev is not None and own > ev:
+        return fail("La chiusura dei pronostici non può essere dopo la serata.")
+    close = guesses_deadline(s)
     for key, label in (("hint1_at", "indizi 1-2"), ("hint2_at", "indizi 3-4")):
         at = _epoch_or_none(s[key])
-        if ev is not None and at is not None and at >= ev:
-            return fail(f"Lo sblocco degli {label} deve essere prima della serata "
-                        "(alla serata i pronostici si chiudono).")
+        if close is not None and at is not None and at >= close:
+            return fail(f"Lo sblocco degli {label} deve essere prima della chiusura dei pronostici.")
     if "extra_timer_label" in data:
         label = str(data["extra_timer_label"] or "").strip()[:60]
         if not label:

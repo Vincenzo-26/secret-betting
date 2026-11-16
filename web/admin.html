@@ -113,8 +113,12 @@
               <input id="sHint2" type="datetime-local">
             </div>
             <div style="flex:1;min-width:200px">
-              <label for="sEvent">🎉 Serata (chiude anche i pronostici)</label>
+              <label for="sEvent">🎉 Serata</label>
               <input id="sEvent" type="datetime-local">
+            </div>
+            <div style="flex:1;min-width:200px">
+              <label for="sDeadline">🗳️ Chiusura pronostici <span class="small muted">(vuoto = alla serata)</span></label>
+              <input id="sDeadline" type="datetime-local">
             </div>
           </div>
           <div class="row">
@@ -205,7 +209,7 @@
           h("p", {}, `👀 ${viewed}/${n} hanno visto il proprio abbinamento · 🔮 ${done}/${n} hanno completato i pronostici`),
           st.hints_count ? h("p", {}, `🕵️ ${st.hints_count} indizi pronti (4 a testa) · indizi 1-2: ${hintDates[0]} · indizi 3-4: ${hintDates[1]}`) : null,
           h("p", {}, game.guesses_open ? h("span", { class: "pill" }, "🟢 Pronostici aperti") : h("span", { class: "pill red" }, "🔒 Pronostici chiusi"),
-            game.deadline ? h("span", { class: "small muted" }, `  si chiudono alla serata: ${fmtDate(game.deadline)}`) : h("span", { class: "small muted" }, "  data della serata non impostata")),
+            game.deadline ? h("span", { class: "small muted" }, `  si chiudono: ${fmtDate(game.deadline)}`) : h("span", { class: "small muted" }, "  nessuna chiusura impostata")),
           h("div", { class: "row" },
             h("button", { class: "btn ghost small", style: "color:var(--ink)", onclick: () =>
               act("POST", "/api/admin/guesses", { closed: game.guesses_open }, game.guesses_open ? "Pronostici chiusi" : "Pronostici riaperti")
@@ -400,6 +404,7 @@
         $("#sHint1").value = toLocalInput(game.hint_dates[0]);
         $("#sHint2").value = toLocalInput(game.hint_dates[1]);
         $("#sEvent").value = toLocalInput(game.event_at);
+        $("#sDeadline").value = toLocalInput(game.deadline_custom);
         $("#sExtraLabel").value = game.extra_timer.label;
         $("#sExtraAt").value = toLocalInput(game.extra_timer.at);
       }
@@ -457,6 +462,7 @@
         hint1_at: toEpoch($("#sHint1").value),
         hint2_at: toEpoch($("#sHint2").value),
         event_at: toEpoch($("#sEvent").value),
+        deadline: toEpoch($("#sDeadline").value),
         extra_timer_label: $("#sExtraLabel").value,
         extra_timer_at: toEpoch($("#sExtraAt").value),
       }, "Impostazioni salvate");

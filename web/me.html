@@ -100,7 +100,7 @@
         ["🔮", "Per ogni altro partecipante pronostica a chi fa il regalo. Ognuno riceve da una sola persona e nessuno regala a se stesso."],
         ["🚫", "Ci sono dei vincoli: nessuno può fare il regalo alla stessa persona dell'anno scorso, l'estrazione ha escluso quelle coppie. Nei pronostici quei nomi compaiono come non selezionabili (🚫 vincolo)."],
         ["✏️", game.deadline
-          ? `Puoi modificare i pronostici quando vuoi fino all'inizio della serata (${fmtDate(game.deadline)}). Ricordati di salvare!`
+          ? `Puoi modificare i pronostici quando vuoi fino a ${fmtDate(game.deadline)}, poi si chiudono per tutti. Ricordati di salvare!`
           : "Puoi modificare i pronostici quando vuoi fino all'inizio della serata. Ricordati di salvare!"],
         ["🧩", "Non sei obbligato a pronosticare tutte le coppie: puoi lasciarne qualcuna vuota, conta solo quello che indovini."],
         ["🎯", "Ogni coppia indovinata vale 1 punto."],
@@ -206,11 +206,14 @@
     function renderTimers() {
       const { game } = data;
       if (game.phase === "reveal") return null;
-      // La serata è anche la chiusura dei pronostici: allo scadere la pagina si ricarica e diventano non modificabili.
+      // Allo scadere della chiusura la pagina si ricarica e i pronostici diventano non modificabili.
+      // Se si chiudono alla serata stessa, un solo timer; altrimenti due.
+      const sameTime = game.deadline && game.deadline === game.event_at;
       const items = [
-        ["🎉", "La serata · chiusura pronostici", game.event_at, "Ci siamo! 🎄", true],
+        sameTime ? null : ["🗳️", "Chiusura pronostici", game.guesses_open || game.phase === "setup" ? game.deadline : null, "Chiusi! 🔒", true],
+        ["🎉", sameTime ? "La serata · chiusura pronostici" : "La serata", game.event_at, "Ci siamo! 🎄", sameTime],
         ["👶", game.extra_timer.label, game.extra_timer.at, "È il momento! 🍼"],
-      ].filter(([, , at]) => at);
+      ].filter(x => x && x[2]);
       if (!items.length) return null;
       const grid = h("div", { class: "timers" });
       for (const [ico, label, at, doneText, reload] of items) {
